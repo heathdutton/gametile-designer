@@ -122,8 +122,8 @@
 
   <div class="section">Display</div>
   <div class="group">
-    <label>Tile Side Length <span id="v-size">60 px</span></label>
-    <input type="range" id="size" min="25" max="120" step="1" value="60">
+    <label>Zoom <span id="v-size">60</span></label>
+    <input type="range" id="size" min="8" max="200" step="1" value="60">
   </div>
   <div class="group">
     <label>Grid Rings <span id="v-grid">3</span></label>
@@ -165,9 +165,25 @@
     <div class="gauge-detail" id="gauge-detail">tab depth ≈ 0.0 mm</div>
   </div>
 
+  <div class="gauge">
+    <div class="gauge-label">Tab Durability</div>
+    <div class="gauge-track" style="background: linear-gradient(to right, #a00030, #e94560 20%, #f4a261 40%, #8ab840 65%, #2a9d8f);">
+      <div class="gauge-pip" id="dur-pip"></div>
+    </div>
+    <div class="gauge-labels">
+      <span>Brittle</span>
+      <span>Fair</span>
+      <span>Sturdy</span>
+      <span>Robust</span>
+    </div>
+    <div class="gauge-readout" id="dur-readout">Solid</div>
+    <div class="gauge-detail" id="dur-detail"></div>
+  </div>
+
   <div class="export-row">
     <label>Side <input type="number" id="export-size" min="5" max="500" step="1" value="50"> mm</label>
   </div>
+  <div class="gauge-detail" id="hex-dims"></div>
   <button id="export-btn">Export Tile as SVG</button>
 
   <div class="info">
@@ -469,29 +485,42 @@ function updateGauge(p) {
   const lockAngleRad = Math.atan(MU);
   // Friction bonus: 1.0 when self-locking, tapering above friction angle
   // but never below 0.3 — mechanical interference still resists motion.
+  //
+  // Angular vs arc jogs: angular jogs have a single flat face with normal
+  // at |θ|/2.  Arc jogs spread the contact over normals from 0 to |θ|,
+  // so portions of the arc self-lock even when the peak angle doesn't.
+  // Model: arc jogs use the average normal angle |θ|/4 instead of |θ|/2.
+  const faceAngle = p.angular ? absRad / 2 : absRad / 4;
+  const tanFace   = Math.tan(faceAngle);
   const frictionBonus = absRad < 0.01 ? 0
-    : tanHalf <= MU ? 1.0
-    : Math.max(0.3, MU / tanHalf);
+    : tanFace <= MU ? 1.0
+    : Math.max(0.3, MU / tanFace);
 
-  // ---- 3. Contact-length factor ----
+  // ---- 3. Contact-area factor ----
   // Jog face chord length (in mm at export scale)
   const jogChord   = 2 * r * Math.sin(absRad / 2);
   const jogChordMm = jogChord * scaleMm;
-  // Vertex rounding shortens the Q→V arm by ρ_vtx / tan(30°) ≈ 1.73 ρ
-  const vtxEat  = rhoVtx / Math.tan(Math.PI / 6);  // ρ√3
-  // Effective radial arm remaining (Q→V has length r)
-  const armLeft = Math.max(0, r - vtxEat);
-  const armFrac = r > 0.001 ? armLeft / r : 0;
-  // Contact area = jogChord × thickness. Normalise against a reference
-  // area that represents "good mechanical engagement": 2mm face × 1.5mm.
-  const contactArea    = jogChordMm * thick * armFrac;
+  // Contact area = jogChord × thickness (the jog face at Q is independent
+  // of vertex rounding — rounding at V doesn't shrink the face at Q).
+  const contactArea    = jogChordMm * thick;
   const refArea        = 2.0 * 1.5;  // mm² — modest engagement baseline
   const contactFactor  = Math.min(1, contactArea / refArea);
 
+  // ---- 4. Vertex-rounding survival factor ----
+  // Vertex rounding shortens the Q→V arm by ρ_vtx / tan(30°) ≈ 1.73 ρ.
+  // If it eats the entire arm, the tab mechanism is smoothed away entirely.
+  const vtxEat  = rhoVtx / Math.tan(Math.PI / 6);  // ρ√3
+  const armLeft = Math.max(0, r - vtxEat);
+  const armFrac = r > 0.001 ? armLeft / r : 0;
+
   // ---- Composite score (0 – 1) ----
   // depthNorm gates everything (no tab = no interlock).
-  // frictionBonus and contactFactor modulate how strong the interlock is.
-  const rawScore = depthNorm * (0.5 + 0.3 * frictionBonus + 0.2 * contactFactor);
+  // armFrac gates everything (vertex rounding can erase the mechanism).
+  // frictionBonus dominates — self-locking is the primary resistance.
+  // contactFactor adds contribution from friction surface area.
+  // Depth alone (no friction, no contact) gives 0.3 — a physical wall
+  // still resists, but much less without friction to hold it.
+  const rawScore = depthNorm * armFrac * (0.3 + 0.5 * frictionBonus + 0.2 * contactFactor);
   const pct      = Math.min(1, Math.max(0, rawScore));
 
   // ---- Update DOM ----
@@ -521,9 +550,68 @@ function updateGauge(p) {
   const mmDepth   = effectiveDepthMm.toFixed(2);
   const mmFace    = jogChordMm.toFixed(1);
   const lockAngleDeg = (lockAngleRad * 180 / Math.PI).toFixed(0);
-  const lockStr   = tanHalf <= MU ? 'self-locking' : 'slides (past ' + lockAngleDeg + '\u00B0)';
+  const lockStr   = tanFace <= MU ? 'self-locking' : 'slides (past ' + lockAngleDeg + '\u00B0)';
   document.getElementById('gauge-detail').textContent =
     `tab ${mmDepth}mm | face ${mmFace}mm \u00D7 ${thick.toFixed(1)}mm | ${lockStr}  (\u00B5=${MU}, ${exportMm}mm side)`;
+
+  // Hex dimensions: flat-to-flat = s×√3, point-to-point = 2s
+  const ftf = (exportMm * Math.sqrt(3)).toFixed(1);
+  const ptp = (exportMm * 2).toFixed(1);
+  document.getElementById('hex-dims').textContent =
+    `\u2B21 ${ftf}mm flat\u2011to\u2011flat | ${ptp}mm point\u2011to\u2011point`;
+
+  // ---- Tab Durability gauge ----
+  // Models how easily the tab (protrusion at each jog) can snap off.
+  // The tab is a cantilever beam: lateral force creates bending moment
+  // at the base.  Breaking force ∝ base_width × thickness² / depth.
+  //
+  // Factor 1 (beam bending, scale-invariant):
+  //   base/depth = 1/cos(|θ|/2) → bendStrength = t² / cos(|θ|/2)
+  //   Thickness dominates quadratically.
+  //
+  // Factor 2 (absolute size):
+  //   Sub-2mm features are vulnerable to grain defects and laser kerf.
+  //   min(base_width_mm, thickness) penalizes small cross-sections.
+  //
+  // Gated by tab presence (no tab = nothing to break = max durability)
+  // and armFrac (vertex rounding can erase the tab entirely).
+
+  const presence = effectiveDepthMm < 0.001 ? 0
+    : Math.min(1, 1 - Math.exp(-3 * effectiveDepthMm));
+  const effectivePresence = presence * armFrac;
+
+  const bendStrength = thick * thick / Math.cos(absRad / 2);
+  const bendFactor   = 1 - Math.exp(-bendStrength / 3.0);
+
+  const minCross   = Math.min(jogChordMm, thick);
+  const sizeFactor = 1 - Math.exp(-minCross / 2.0);
+
+  const tabDurability = 0.6 * bendFactor + 0.4 * sizeFactor;
+  const durability    = 1.0 - effectivePresence * (1.0 - tabDurability);
+  const durPct        = Math.min(1, Math.max(0, durability));
+
+  document.getElementById('dur-pip').style.left = (durPct * 100) + '%';
+
+  const durLabels = [
+    [0.00, 'Brittle',  '#a00030'],
+    [0.10, 'Fragile',  '#d03050'],
+    [0.20, 'Delicate', '#e08030'],
+    [0.35, 'Fair',     '#c8a030'],
+    [0.50, 'Solid',    '#8ab840'],
+    [0.65, 'Sturdy',   '#4aad7f'],
+    [0.80, 'Robust',   '#2a9d8f'],
+    [0.95, 'Ironclad', '#1a8a7a'],
+  ];
+  let durLabel = durLabels[0][1], durColor = durLabels[0][2];
+  for (const [thresh, l, c] of durLabels) {
+    if (durPct >= thresh) { durLabel = l; durColor = c; }
+  }
+  const durReadout = document.getElementById('dur-readout');
+  durReadout.textContent = durLabel;
+  durReadout.style.color = durColor;
+
+  document.getElementById('dur-detail').textContent =
+    `base ${jogChordMm.toFixed(1)}mm \u00D7 ${thick.toFixed(1)}mm | depth ${effectiveDepthMm.toFixed(1)}mm | min section ${minCross.toFixed(1)}mm`;
 }
 
 // ============================================================
@@ -914,7 +1002,7 @@ const sliders = [
   { id: 'round-edge', vid: 'v-round-edge', fmt: v => (+v).toFixed(3) + ' \u00D7 side' },
   { id: 'round-vtx',  vid: 'v-round-vtx',  fmt: v => (+v).toFixed(3) + ' \u00D7 side' },
   { id: 'thickness', vid: 'v-thickness', fmt: v => (+v).toFixed(1) + ' mm' },
-  { id: 'size',    vid: 'v-size',    fmt: v => v + ' px' },
+  { id: 'size',    vid: 'v-size',    fmt: v => v },
   { id: 'grid',    vid: 'v-grid',    fmt: v => v },
   { id: 'explode', vid: 'v-explode', fmt: v => v + '%' },
 ];
