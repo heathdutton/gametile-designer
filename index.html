@@ -103,14 +103,20 @@
   /* Stats overlay */
   #stats-overlay {
     position: absolute; bottom: 32px; left: 32px;
-    background: rgba(10,10,26,0.88);
+    background: #0a0a1a;
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 10px;
     padding: 14px 18px;
     min-width: 260px;
     max-width: 340px;
-    pointer-events: none;
+    pointer-events: auto;
   }
+  .overlay-close {
+    position: absolute; top: 6px; right: 8px;
+    background: none; border: none; color: #555; font-size: 13px;
+    cursor: pointer; padding: 2px 5px; line-height: 1;
+  }
+  .overlay-close:hover { color: #e94560; }
   #stats-overlay .gauge { margin: 0 0 10px; }
   #stats-overlay .gauge:last-child { margin-bottom: 0; }
   #stats-overlay .gauge-label { border-top: none; padding-top: 0; margin-bottom: 6px; }
@@ -209,6 +215,7 @@
 <div id="main">
   <canvas id="c"></canvas>
   <div id="stats-overlay">
+    <button class="overlay-close" onclick="document.getElementById('show-stats').checked=false;onInput();">&times;</button>
     <div class="gauge">
       <div class="gauge-label">Interlock Feel</div>
       <div class="gauge-track"><div class="gauge-pip" id="gauge-pip"></div></div>
@@ -248,6 +255,35 @@ const cvs = document.getElementById('c');
 const ctx = cvs.getContext('2d');
 
 function deg(d) { return d * Math.PI / 180; }
+
+const OVERLAY_BOX = 260;  // unified width & height for canvas overlays
+let closeRegions = [];     // {x, y, w, h, id} hit targets for overlay X buttons
+
+function drawOverlayClose(bx, by, bw, checkboxId) {
+  const sz = 14, margin = 8;
+  const rx = bx + bw - margin - sz;
+  const ry = by + margin;
+  closeRegions.push({ x: rx - 2, y: ry - 2, w: sz + 4, h: sz + 4, id: checkboxId });
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(rx, ry); ctx.lineTo(rx + sz, ry + sz);
+  ctx.moveTo(rx + sz, ry); ctx.lineTo(rx, ry + sz);
+  ctx.stroke();
+}
+
+cvs.addEventListener('click', e => {
+  const rect = cvs.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (cvs.width / rect.width);
+  const my = (e.clientY - rect.top) * (cvs.height / rect.height);
+  for (const r of closeRegions) {
+    if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+      document.getElementById(r.id).checked = false;
+      onInput();
+      return;
+    }
+  }
+});
 
 // ============================================================
 //  Hex geometry
@@ -704,6 +740,7 @@ function getP() {
 }
 
 function draw() {
+  closeRegions = [];
   const p = getP();
   const showStats = document.getElementById('show-stats').checked;
   document.getElementById('stats-overlay').style.display = showStats ? '' : 'none';
@@ -773,23 +810,23 @@ function draw() {
 // ============================================================
 
 function drawSingleTile(p) {
-  const s = Math.min(p.size * 1.4, 80);
-  const r = p.radius * s;
-  const pad = 18;
-  const bw = s * 2.3 + pad * 2;
-  const bh = s * 2.3 + pad * 2;
+  const pad = 16;
+  const bw = OVERLAY_BOX, bh = OVERLAY_BOX;
   const bx = cvs.width - bw - 12;
   const by = 12;
+  const s = Math.min(p.size * 1.4, (bw - pad * 2) / 2.3);
+  const r = p.radius * s;
   const cx = bx + bw / 2;
   const cy = by + bh / 2 + 10;
 
-  // Background box
-  ctx.fillStyle = 'rgba(10,10,26,0.85)';
+  // Background box (opaque, rounded)
+  ctx.fillStyle = '#0a0a1a';
   ctx.strokeStyle = 'rgba(255,255,255,0.08)';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.rect(bx, by, bw, bh);
+  ctx.roundRect(bx, by, bw, bh, 10);
   ctx.fill(); ctx.stroke();
+  drawOverlayClose(bx, by, bw, 'show-single');
 
   // Label
   ctx.fillStyle = '#666';
@@ -865,23 +902,23 @@ function drawSingleTile(p) {
 // ============================================================
 
 function drawJunction(p) {
-  const s = Math.min(p.size * 3.2, 185);
-  const r = p.radius * s;
   const pad = 14;
-  const bw = s * 1.8 + pad * 2;
-  const bh = s * 1.6 + pad * 2;
+  const bw = OVERLAY_BOX, bh = OVERLAY_BOX;
   const bx = cvs.width - bw - 12;
   const by = cvs.height - bh - 12;
+  const s = Math.min(p.size * 3.2, (bw - pad * 2) / 1.8);
+  const r = p.radius * s;
   const cx = bx + bw / 2;
   const cy = by + bh / 2;
 
-  // Background box
-  ctx.fillStyle = 'rgba(10,10,26,0.85)';
+  // Background box (opaque, rounded)
+  ctx.fillStyle = '#0a0a1a';
   ctx.strokeStyle = 'rgba(255,255,255,0.08)';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.rect(bx, by, bw, bh);
+  ctx.roundRect(bx, by, bw, bh, 10);
   ctx.fill(); ctx.stroke();
+  drawOverlayClose(bx, by, bw, 'show-junction');
 
   // Label
   ctx.fillStyle = '#666';
@@ -909,7 +946,7 @@ function drawJunction(p) {
   // Clip to the box
   ctx.save();
   ctx.beginPath();
-  ctx.rect(bx, by + 20, bw, bh - 20);
+  ctx.roundRect(bx, by + 20, bw, bh - 20, [0, 0, 10, 10]);
   ctx.clip();
 
   trio.forEach(t => {
