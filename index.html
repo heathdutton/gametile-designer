@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Hextile Designer — Interlocking Hex Tile Generator for Laser Cutting</title>
-<meta name="description" content="Interactive design tool for laser-cut hexagonal board game tiles with interlocking twist joints. Adjust twist angle, radius, rounding, and thickness. Export SVG for laser cutting.">
-<meta property="og:title" content="Hextile Designer">
-<meta property="og:description" content="Design interlocking hexagonal tiles for laser cutting. Adjust geometry, preview interlock feel, and export SVG.">
+<title>Gametile Designer — Interlocking Game Tile Generator for Laser Cutting</title>
+<meta name="description" content="Interactive design tool for laser-cut board game tiles (triangle, square, hexagon) with interlocking twist joints. Adjust twist angle, radius, rounding, and thickness. Export SVG for laser cutting.">
+<meta property="og:title" content="Gametile Designer">
+<meta property="og:description" content="Design interlocking game tiles for laser cutting. Triangle, square, and hexagon shapes with twist-lock joints. Export SVG.">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://heathdutton.github.io/hextile-designer/">
+<meta property="og:url" content="https://heathdutton.github.io/gametile-designer/">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Hextile Designer">
-<meta name="twitter:description" content="Interactive hex tile designer with twist-lock joints for laser-cut board game tiles. Export SVG.">
-<link rel="canonical" href="https://heathdutton.github.io/hextile-designer/">
+<meta name="twitter:title" content="Gametile Designer">
+<meta name="twitter:description" content="Interactive game tile designer with twist-lock joints for laser-cut board game tiles. Triangle, square, hexagon. Export SVG.">
+<link rel="canonical" href="https://heathdutton.github.io/gametile-designer/">
 <style>
   :root {
     --bg: #1a1a2e;
@@ -165,7 +165,7 @@
 <body>
 
 <div id="sidebar">
-  <h1>Hextile Designer</h1>
+  <h1>Gametile Designer</h1>
   <div class="subtitle">Soft-interlocking game tiles</div>
 
   <div class="pill-switch">
@@ -249,27 +249,27 @@
 
   <details class="examples">
     <summary>Examples</summary>
-    <a href="#angle=32&radius=0.17&round-edge=0.03&round-vtx=0.03&thickness=2&export-size=30&size=85&grid=2&explode=0&tilt=0&perspective=35&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Default</a>
-    <a href="#angle=0&radius=0&round-edge=0&round-vtx=0&thickness=2&export-size=26&size=85&grid=2&explode=0&tilt=0&perspective=35&angular=1&show-original=0&show-circles=0&show-single=0&show-junction=0&show-stats=0&scheme=0">Catan (26mm, no interlock)</a>
-    <a href="#angle=6&radius=0.25&round-edge=0.02&round-vtx=0&thickness=3&export-size=26&size=85&grid=2&explode=0&tilt=0&perspective=35&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Catan-like (gentle, 26mm)</a>
-    <a href="#angle=20&radius=0.35&round-edge=0.03&round-vtx=0.01&thickness=3&export-size=40&size=85&grid=2&explode=0&tilt=0&perspective=35&angular=0&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Tight puzzle (arc, 40mm)</a>
-    <a href="#angle=12&radius=0.3&round-edge=0&round-vtx=0&thickness=1.5&export-size=15&size=85&grid=2&explode=0&tilt=0&perspective=35&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Wargame counter (15mm)</a>
-    <a href="#angle=10&radius=0.2&round-edge=0.015&round-vtx=0&thickness=5&export-size=58&size=85&grid=2&explode=0&tilt=0&perspective=35&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Large format (58mm, 5mm stock)</a>
-    <a href="#angle=30&radius=0.4&round-edge=0.04&round-vtx=0.02&thickness=3&export-size=50&size=85&grid=2&explode=15&tilt=0&perspective=35&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=3">Decorative (high twist, exploded)</a>
+    <a href="#sides=6&angle=32&radius=0.17&round-edge=0.03&round-vtx=0.03&thickness=2&export-size=30&size=85&grid=2&explode=0&tilt=0&perspective=35&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Default (hex)</a>
+    <a href="#sides=6&angle=0&radius=0&round-edge=0&round-vtx=0&thickness=2&export-size=26&size=85&grid=2&explode=0&tilt=0&perspective=35&angular=1&show-original=0&show-circles=0&show-single=0&show-junction=0&show-stats=0&scheme=0">Catan (26mm, no interlock)</a>
+    <a href="#sides=6&angle=6&radius=0.25&round-edge=0.02&round-vtx=0&thickness=3&export-size=26&size=85&grid=2&explode=0&tilt=0&perspective=35&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Catan-like (gentle, 26mm)</a>
+    <a href="#sides=6&angle=20&radius=0.35&round-edge=0.03&round-vtx=0.01&thickness=3&export-size=40&size=85&grid=2&explode=0&tilt=0&perspective=35&angular=0&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Tight puzzle (arc, 40mm)</a>
+    <a href="#sides=4&angle=25&radius=0.2&round-edge=0.02&round-vtx=0.02&thickness=3&export-size=30&size=85&grid=2&explode=0&tilt=0&perspective=35&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Square tiles (30mm)</a>
+    <a href="#sides=3&angle=15&radius=0.2&round-edge=0.02&round-vtx=0.01&thickness=3&export-size=30&size=85&grid=2&explode=0&tilt=0&perspective=35&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Triangle tiles (30mm)</a>
+    <a href="#sides=6&angle=30&radius=0.4&round-edge=0.04&round-vtx=0.02&thickness=3&export-size=50&size=85&grid=2&explode=15&tilt=0&perspective=35&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=3">Decorative hex (high twist, exploded)</a>
   </details>
 
   <div class="info">
-    At each vertex where 3 tiles meet, the edges are "twisted" by the twist
+    At each vertex where tiles meet, the edges are "twisted" by the twist
     angle within the twist radius. Each edge gets a small tab at one end and a
     notch at the other &mdash; tiles softly interlock, easy to place from above
-    but resistant to sliding apart. The tiles still meet at each vertex point
+    but resistant to sliding apart. Tiles still meet at each vertex point
     (no voids). Tab depth &asymp; r &times; sin(&theta;).
   </div>
-  <a href="https://github.com/heathdutton/hextile-designer" target="_blank" rel="noopener noreferrer" style="display:block; margin-top:16px; font-size:11px; color:var(--muted); text-decoration:none;">github.com/heathdutton/hextile-designer</a>
+  <a href="https://github.com/heathdutton/gametile-designer" target="_blank" rel="noopener noreferrer" style="display:block; margin-top:16px; font-size:11px; color:var(--muted); text-decoration:none;">github.com/heathdutton/gametile-designer</a>
 </div>
 
 <div id="main">
-  <canvas id="c">Hextile preview</canvas>
+  <canvas id="c">Tile preview</canvas>
   <div id="stats-overlay">
     <button class="overlay-close" id="close-stats-btn" aria-label="Close stats">&times;</button>
     <div class="gauge">
