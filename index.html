@@ -16,17 +16,17 @@
 <link rel="canonical" href="https://heathdutton.github.io/hextile-designer/">
 <style>
   :root {
-    --bg: #0d0221;
-    --sidebar: #1a0533;
-    --canvas: #120630;
-    --border: #3a1568;
-    --accent: #ff6ec7;
-    --accent-hover: #e050a8;
-    --label: #c0a0d8;
-    --muted: #6a4c93;
-    --link: #72c4ff;
-    --overlay-bg: #0d0221;
-    --tile-stroke: #0d0221;
+    --bg: #1a1a2e;
+    --sidebar: #16213e;
+    --canvas: #0f3460;
+    --border: #2a2a4e;
+    --accent: #e94560;
+    --accent-hover: #c73650;
+    --label: #bbb;
+    --muted: #555;
+    --link: #7ba4cc;
+    --overlay-bg: #1a1a2e;
+    --tile-stroke: #1a1a2e;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -204,12 +204,12 @@
   <div class="group" style="margin-top: 10px;">
     <label>Theme
       <select id="scheme" style="float: right;">
-        <option value="0">Synthwave</option>
-        <option value="1">Neon</option>
-        <option value="2">Ocean</option>
-        <option value="3">Earth</option>
-        <option value="4">Berry</option>
-        <option value="5">Slate</option>
+        <option value="0">Neon</option>
+        <option value="1">Berry</option>
+        <option value="2">Earth</option>
+        <option value="3">Ocean</option>
+        <option value="4">Slate</option>
+        <option value="5">Synth</option>
       </select>
     </label>
   </div>
@@ -225,7 +225,7 @@
     <a href="#angle=20&radius=0.35&round-edge=0.03&round-vtx=0.01&thickness=3&export-size=40&size=85&grid=2&explode=0&angular=0&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Tight puzzle (arc, 40mm)</a>
     <a href="#angle=12&radius=0.3&round-edge=0&round-vtx=0&thickness=1.5&export-size=15&size=85&grid=2&explode=0&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Wargame counter (15mm)</a>
     <a href="#angle=10&radius=0.2&round-edge=0.015&round-vtx=0&thickness=5&export-size=58&size=85&grid=2&explode=0&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Large format (58mm, 5mm stock)</a>
-    <a href="#angle=30&radius=0.4&round-edge=0.04&round-vtx=0.02&thickness=3&export-size=50&size=85&grid=2&explode=15&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=2">Decorative (high twist, exploded)</a>
+    <a href="#angle=30&radius=0.4&round-edge=0.04&round-vtx=0.02&thickness=3&export-size=50&size=85&grid=2&explode=15&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=3">Decorative (high twist, exploded)</a>
   </details>
 
   <div class="info">
@@ -524,30 +524,30 @@ function tracePath(pts) {
 
 // Themes: tile colors + full UI palette
 const SCHEMES = [
-  { name: 'Synthwave', colors: ['#b537f2', '#41ead4', '#ff2975'],
-    bg:'#0d0221', sidebar:'#1a0533', canvas:'#120630', border:'#3a1568',
-    accent:'#ff6ec7', accentHover:'#e050a8', label:'#c0a0d8', muted:'#6a4c93',
-    link:'#72c4ff', overlay:'#0d0221', stroke:'#0d0221' },
   { name: 'Neon', colors: ['#e94560', '#2a9d8f', '#f4a261'],
     bg:'#1a1a2e', sidebar:'#16213e', canvas:'#0f3460', border:'#2a2a4e',
     accent:'#e94560', accentHover:'#c73650', label:'#bbb', muted:'#555',
     link:'#7ba4cc', overlay:'#1a1a2e', stroke:'#1a1a2e' },
-  { name: 'Ocean', colors: ['#1d3557', '#457b9d', '#a8dadc'],
-    bg:'#0b1929', sidebar:'#0f2132', canvas:'#132e45', border:'#1d3557',
-    accent:'#a8dadc', accentHover:'#8ac4c8', label:'#8ab4c4', muted:'#4a7080',
-    link:'#a8dadc', overlay:'#0b1929', stroke:'#0b1929' },
-  { name: 'Earth', colors: ['#606c38', '#bc6c25', '#dda15e'],
-    bg:'#1c1a14', sidebar:'#252218', canvas:'#2a2616', border:'#3d3828',
-    accent:'#dda15e', accentHover:'#c48a48', label:'#b8a888', muted:'#706848',
-    link:'#c8a868', overlay:'#1c1a14', stroke:'#1c1a14' },
   { name: 'Berry', colors: ['#7b2d8e', '#d63384', '#ffb3c6'],
     bg:'#1a0e1e', sidebar:'#241428', canvas:'#1e0a22', border:'#3a1845',
     accent:'#d63384', accentHover:'#b82870', label:'#c8a0b8', muted:'#7a4868',
     link:'#e888b8', overlay:'#1a0e1e', stroke:'#1a0e1e' },
+  { name: 'Earth', colors: ['#606c38', '#bc6c25', '#dda15e'],
+    bg:'#1c1a14', sidebar:'#252218', canvas:'#2a2616', border:'#3d3828',
+    accent:'#dda15e', accentHover:'#c48a48', label:'#b8a888', muted:'#706848',
+    link:'#c8a868', overlay:'#1c1a14', stroke:'#1c1a14' },
+  { name: 'Ocean', colors: ['#1d3557', '#457b9d', '#a8dadc'],
+    bg:'#0b1929', sidebar:'#0f2132', canvas:'#132e45', border:'#1d3557',
+    accent:'#a8dadc', accentHover:'#8ac4c8', label:'#8ab4c4', muted:'#4a7080',
+    link:'#a8dadc', overlay:'#0b1929', stroke:'#0b1929' },
   { name: 'Slate', colors: ['#495057', '#6c757d', '#adb5bd'],
     bg:'#1a1c1e', sidebar:'#212529', canvas:'#2b2e32', border:'#3a3e44',
     accent:'#adb5bd', accentHover:'#8e959c', label:'#9a9ea4', muted:'#5a5e64',
     link:'#8ca0b0', overlay:'#1a1c1e', stroke:'#1a1c1e' },
+  { name: 'Synth', colors: ['#8b6cc7', '#4aada8', '#d46a94'],
+    bg:'#0d0221', sidebar:'#1a0533', canvas:'#120630', border:'#3a1568',
+    accent:'#ff6ec7', accentHover:'#e050a8', label:'#c0a0d8', muted:'#6a4c93',
+    link:'#72c4ff', overlay:'#0d0221', stroke:'#0d0221' },
 ];
 const BASE = [...SCHEMES[0].colors];
 let THEME = SCHEMES[0];
