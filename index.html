@@ -196,6 +196,10 @@
     <label>Tilt <span id="v-tilt">0°</span></label>
     <input type="range" id="tilt" min="0" max="60" step="1" value="0">
   </div>
+  <div class="group">
+    <label>Perspective <span id="v-perspective">0%</span></label>
+    <input type="range" id="perspective" min="0" max="100" step="1" value="0">
+  </div>
 
   <div class="section">Options</div>
   <div class="cb"><label><input type="checkbox" id="angular" checked> Angular joints</label></div>
@@ -222,13 +226,13 @@
 
   <details class="examples">
     <summary>Examples</summary>
-    <a href="#angle=32&radius=0.17&round-edge=0.03&round-vtx=0.03&thickness=2&export-size=30&size=85&grid=2&explode=0&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Default</a>
-    <a href="#angle=0&radius=0&round-edge=0&round-vtx=0&thickness=2&export-size=26&size=85&grid=2&explode=0&angular=1&show-original=0&show-circles=0&show-single=0&show-junction=0&show-stats=0&scheme=0">Catan (26mm, no interlock)</a>
-    <a href="#angle=6&radius=0.25&round-edge=0.02&round-vtx=0&thickness=3&export-size=26&size=85&grid=2&explode=0&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Catan-like (gentle, 26mm)</a>
-    <a href="#angle=20&radius=0.35&round-edge=0.03&round-vtx=0.01&thickness=3&export-size=40&size=85&grid=2&explode=0&angular=0&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Tight puzzle (arc, 40mm)</a>
-    <a href="#angle=12&radius=0.3&round-edge=0&round-vtx=0&thickness=1.5&export-size=15&size=85&grid=2&explode=0&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Wargame counter (15mm)</a>
-    <a href="#angle=10&radius=0.2&round-edge=0.015&round-vtx=0&thickness=5&export-size=58&size=85&grid=2&explode=0&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Large format (58mm, 5mm stock)</a>
-    <a href="#angle=30&radius=0.4&round-edge=0.04&round-vtx=0.02&thickness=3&export-size=50&size=85&grid=2&explode=15&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=3">Decorative (high twist, exploded)</a>
+    <a href="#angle=32&radius=0.17&round-edge=0.03&round-vtx=0.03&thickness=2&export-size=30&size=85&grid=2&explode=0&tilt=0&perspective=0&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Default</a>
+    <a href="#angle=0&radius=0&round-edge=0&round-vtx=0&thickness=2&export-size=26&size=85&grid=2&explode=0&tilt=0&perspective=0&angular=1&show-original=0&show-circles=0&show-single=0&show-junction=0&show-stats=0&scheme=0">Catan (26mm, no interlock)</a>
+    <a href="#angle=6&radius=0.25&round-edge=0.02&round-vtx=0&thickness=3&export-size=26&size=85&grid=2&explode=0&tilt=0&perspective=0&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Catan-like (gentle, 26mm)</a>
+    <a href="#angle=20&radius=0.35&round-edge=0.03&round-vtx=0.01&thickness=3&export-size=40&size=85&grid=2&explode=0&tilt=0&perspective=0&angular=0&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Tight puzzle (arc, 40mm)</a>
+    <a href="#angle=12&radius=0.3&round-edge=0&round-vtx=0&thickness=1.5&export-size=15&size=85&grid=2&explode=0&tilt=0&perspective=0&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Wargame counter (15mm)</a>
+    <a href="#angle=10&radius=0.2&round-edge=0.015&round-vtx=0&thickness=5&export-size=58&size=85&grid=2&explode=0&tilt=0&perspective=0&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=0">Large format (58mm, 5mm stock)</a>
+    <a href="#angle=30&radius=0.4&round-edge=0.04&round-vtx=0.02&thickness=3&export-size=50&size=85&grid=2&explode=15&tilt=0&perspective=0&angular=1&show-original=0&show-circles=0&show-single=1&show-junction=1&show-stats=1&scheme=3">Decorative (high twist, exploded)</a>
   </details>
 
   <div class="info">
@@ -846,11 +850,29 @@ function draw() {
   const sinTilt = Math.sin(tiltRad);
   const thickPx = p.thickness * s / p.exportSize;
   const extH = thickPx * sinTilt;
+  const persp = +document.getElementById('perspective').value;
+  // 0% → focalDist=Infinity (orthographic), 100% → focalDist=0.4×height (strong)
+  const focalDist = persp > 0
+    ? cvs.height * (0.4 + 4.6 * Math.pow(1 - persp / 100, 2))
+    : Infinity;
 
-  // Project a point: Y compressed by cos(tilt) around canvas center
+  // Project a top-face point with perspective + Y compression
   const proj = tilt > 0
-    ? pt => ({ x: pt.x, y: oy + (pt.y - oy) * cosTilt })
+    ? pt => {
+        const yRel = pt.y - oy;
+        const z = -yRel * sinTilt;
+        const sc = focalDist / (focalDist + z);
+        return { x: ox + (pt.x - ox) * sc, y: oy + yRel * cosTilt * sc };
+      }
     : pt => pt;
+
+  // Project a bottom-face point (offset by tile thickness into the table)
+  const projBot = pt => {
+    const yRel = pt.y - oy;
+    const z = -yRel * sinTilt + thickPx * cosTilt;
+    const sc = focalDist / (focalDist + z);
+    return { x: ox + (pt.x - ox) * sc, y: oy + (yRel * cosTilt + thickPx * sinTilt) * sc };
+  };
 
   // Build tile data, sort back-to-front when tilted
   const tileData = cells.map(cell => {
@@ -873,18 +895,23 @@ function draw() {
       const edgeColor = darkenHex(THEME.colors[td.ci], 0.55);
       for (let i = 0; i < top.length; i++) {
         const j = (i + 1) % top.length;
+        // Outward normal from original (un-projected) outline (CW winding)
+        const o0 = td.outline[i], o1 = td.outline[j];
+        const odx = o1.x - o0.x, ody = o1.y - o0.y;
+        const outNy = -odx;
+        if (outNy <= 0) continue; // skip back-facing edges
         const t0 = top[i], t1 = top[j];
-        // Only draw edges whose outward normal faces downward (visible sides)
-        const nx = -(t1.y - t0.y), ny = t1.x - t0.x;
-        if (ny <= 0) continue;
+        const b0 = projBot(o0), b1 = projBot(o1);
         ctx.beginPath();
         ctx.moveTo(t0.x, t0.y);
         ctx.lineTo(t1.x, t1.y);
-        ctx.lineTo(t1.x, t1.y + extH);
-        ctx.lineTo(t0.x, t0.y + extH);
+        ctx.lineTo(b1.x, b1.y);
+        ctx.lineTo(b0.x, b0.y);
         ctx.closePath();
         // Shade by facing angle
-        const facing = ny / Math.sqrt(nx * nx + ny * ny);
+        const outNx = ody;
+        const len = Math.sqrt(outNx * outNx + outNy * outNy);
+        const facing = outNy / len;
         ctx.fillStyle = facing > 0.7 ? sideColor : edgeColor;
         ctx.fill();
         ctx.strokeStyle = THEME.stroke;
@@ -920,8 +947,9 @@ function draw() {
     if (p.showCirc) {
       hexVerts(td.cx, td.cy, s).forEach(v => {
         const pv = proj(v);
+        const vSc = tilt > 0 ? focalDist / (focalDist - (v.y - oy) * sinTilt) : 1;
         ctx.beginPath();
-        ctx.ellipse(pv.x, pv.y, r, r * cosTilt, 0, 0, TAU);
+        ctx.ellipse(pv.x, pv.y, r * vSc, r * cosTilt * vSc, 0, 0, TAU);
         ctx.strokeStyle = 'rgba(255,255,255,0.2)';
         ctx.lineWidth = 0.6;
         ctx.stroke();
@@ -1283,6 +1311,7 @@ const sliders = [
   { id: 'grid',    vid: 'v-grid',    fmt: v => v },
   { id: 'explode', vid: 'v-explode', fmt: v => v + '%' },
   { id: 'tilt',    vid: 'v-tilt',    fmt: v => v + '\u00B0' },
+  { id: 'perspective', vid: 'v-perspective', fmt: v => v + '%' },
 ];
 
 function onInput() { draw(); saveToUrl(); }
