@@ -54,6 +54,11 @@
     border: none; border-radius: 6px; cursor: pointer; font-size: 13px; margin-top: 8px;
   }
   #export-btn:hover { background: #c73650; }
+  #export-grid-btn {
+    width: 100%; padding: 8px; background: transparent; color: #e94560;
+    border: 1px solid #e94560; border-radius: 6px; cursor: pointer; font-size: 12px; margin-top: 6px;
+  }
+  #export-grid-btn:hover { background: rgba(233,69,96,0.1); }
   .info { font-size: 11px; color: #555; margin-top: 16px; line-height: 1.6; }
 
   /* Interlock gauge */
@@ -136,8 +141,9 @@
     <label>Tile Thickness <span id="v-thickness">1.5 mm</span></label>
     <input type="range" id="thickness" min="0.5" max="6" step="0.1" value="1.5">
   </div>
-  <div class="export-row">
-    <label>Side <input type="number" id="export-size" min="5" max="500" step="1" value="50"> mm</label>
+  <div class="group">
+    <label>Tile Side Length <span id="v-export-size">50 mm</span></label>
+    <input type="range" id="export-size" min="10" max="60" step="1" value="50">
   </div>
   <div class="gauge-detail" id="hex-dims"></div>
 
@@ -486,13 +492,15 @@ function updateGauge(p) {
   const effectiveDepth   = Math.max(0, rawDepth - edgeRoundLoss);
   const effectiveDepthMm = effectiveDepth * scaleMm;
 
-  // Tab depth matters relative to material thickness, not side length.
-  // Even a tab a fraction of the thickness deep creates strong resistance —
-  // you must deform or lift the tile to clear it.
-  // A tab equal to the thickness is fully mechanically blocking.
-  // Use a saturating curve: quick ramp to useful grip, full at depth ≥ thickness.
-  const depthRatio = effectiveDepthMm / Math.max(thick, 0.01);
-  const depthNorm  = Math.min(1, 1 - Math.exp(-3 * depthRatio));
+  // Tab presence gate: is there a meaningful tab at all?
+  // Saturates quickly — even a 1mm tab is "present".
+  const depthPresence = effectiveDepthMm < 0.001 ? 0
+    : Math.min(1, 1 - Math.exp(-2 * effectiveDepthMm));
+
+  // Mechanical block: how much of a physical wall is this tab?
+  // A 5mm tab is a serious wall regardless of material.
+  // Linear ramp — proportional to absolute depth.
+  const mechanicalBlock = Math.min(1, effectiveDepthMm / 5.0);
 
   // ---- 2. Self-locking factor ----
   // Face normal angle from edge direction = |θ|/2.
@@ -525,7 +533,7 @@ function updateGauge(p) {
   // Contact area = face length × thickness (the jog face at Q is independent
   // of vertex rounding — rounding at V doesn't shrink the face at Q).
   const contactArea    = jogChordMm * thick;
-  const refArea        = 2.0 * 1.5;  // mm² — modest engagement baseline
+  const refArea        = 4.0 * 2.0;  // mm² — meaningful engagement surface
   const contactFactor  = Math.min(1, contactArea / refArea);
 
   // ---- 4. Vertex-rounding survival factor ----
@@ -536,13 +544,16 @@ function updateGauge(p) {
   const armFrac = r > 0.001 ? armLeft / r : 0;
 
   // ---- Composite score (0 – 1) ----
-  // depthNorm gates everything (no tab = no interlock).
+  // depthPresence gates everything (no tab = no interlock).
   // armFrac gates everything (vertex rounding can erase the mechanism).
-  // frictionBonus dominates — self-locking is the primary resistance.
-  // contactFactor adds contribution from friction surface area.
-  // Depth alone (no friction, no contact) gives 0.3 — a physical wall
-  // still resists, but much less without friction to hold it.
-  const rawScore = depthNorm * armFrac * (0.3 + 0.5 * frictionBonus + 0.2 * contactFactor);
+  //
+  // Two components:
+  //   mechanicalBlock (40%): the tab is a physical wall — depth in mm
+  //   frictionHold (60%): friction force = μ × normal × contact area
+  //     Friction only counts if there's contact surface (frictionBonus × contactFactor).
+  //     This prevents tiny self-locking tabs from scoring too high.
+  const frictionHold = frictionBonus * contactFactor;
+  const rawScore = depthPresence * armFrac * (0.4 * mechanicalBlock + 0.6 * frictionHold);
   const pct      = Math.min(1, Math.max(0, rawScore));
 
   // ---- Update DOM ----
@@ -606,9 +617,7 @@ function updateGauge(p) {
   // Gated by tab presence (no tab = nothing to break = max durability)
   // and armFrac (vertex rounding can erase the tab entirely).
 
-  const presence = effectiveDepthMm < 0.001 ? 0
-    : Math.min(1, 1 - Math.exp(-3 * effectiveDepthMm));
-  const effectivePresence = presence * armFrac;
+  const effectivePresence = depthPresence * armFrac;
 
   // Stress concentration factor at tab base fillet
   const rhoEdgeMm = rhoEdge * scaleMm;
@@ -838,11 +847,11 @@ function drawSingleTile(p) {
 // ============================================================
 
 function drawJunction(p) {
-  const s = Math.min(p.size * 2.47, 143);
+  const s = Math.min(p.size * 3.2, 185);
   const r = p.radius * s;
-  const pad = 18;
-  const bw = s * 3 + pad * 2;
-  const bh = s * 2.8 + pad * 2;
+  const pad = 14;
+  const bw = s * 1.8 + pad * 2;
+  const bh = s * 1.6 + pad * 2;
   const bx = cvs.width - bw - 12;
   const by = cvs.height - bh - 12;
   const cx = bx + bw / 2;
@@ -1049,7 +1058,6 @@ function saveToUrl() {
   sliders.forEach(s => params.set(s.id, document.getElementById(s.id).value));
   CHECKBOXES.forEach(id => params.set(id, document.getElementById(id).checked ? '1' : '0'));
   params.set('scheme', document.getElementById('scheme').value);
-  params.set('export-size', document.getElementById('export-size').value);
   history.replaceState(null, '', '#' + params.toString());
 }
 
@@ -1072,9 +1080,6 @@ function loadFromUrl() {
     document.getElementById('scheme').value = idx;
     setScheme(idx);
   }
-  if (params.has('export-size')) {
-    document.getElementById('export-size').value = params.get('export-size');
-  }
 }
 
 // ============================================================
@@ -1087,6 +1092,7 @@ const sliders = [
   { id: 'round-edge', vid: 'v-round-edge', fmt: v => (+v).toFixed(3) + ' \u00D7 side' },
   { id: 'round-vtx',  vid: 'v-round-vtx',  fmt: v => (+v).toFixed(3) + ' \u00D7 side' },
   { id: 'thickness', vid: 'v-thickness', fmt: v => (+v).toFixed(1) + ' mm' },
+  { id: 'export-size', vid: 'v-export-size', fmt: v => v + ' mm' },
   { id: 'size',    vid: 'v-size',    fmt: v => v },
   { id: 'grid',    vid: 'v-grid',    fmt: v => v },
   { id: 'explode', vid: 'v-explode', fmt: v => v + '%' },
@@ -1108,8 +1114,6 @@ document.getElementById('scheme').addEventListener('change', () => {
   setScheme(+document.getElementById('scheme').value);
   onInput();
 });
-document.getElementById('export-size').addEventListener('input', onInput);
-
 // ============================================================
 //  Canvas sizing & kick-off
 // ============================================================
