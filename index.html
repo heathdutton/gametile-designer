@@ -119,6 +119,23 @@
   }
   select { cursor: pointer; }
   input[type=number] { width: 70px; }
+
+  /* Pill switch */
+  .pill-switch {
+    display: flex; border-radius: 8px; overflow: hidden;
+    border: 1px solid var(--border); margin-bottom: 20px;
+  }
+  .pill-switch input { display: none; }
+  .pill-switch label {
+    flex: 1; text-align: center; padding: 8px 0; font-size: 13px;
+    font-weight: 600; color: var(--label); cursor: pointer;
+    background: var(--bg); transition: background 0.15s, color 0.15s;
+    border-right: 1px solid var(--border);
+  }
+  .pill-switch label:last-of-type { border-right: none; }
+  .pill-switch input:checked + label {
+    background: var(--accent); color: var(--bg);
+  }
   .export-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
   .export-row label { font-size: 12px; color: var(--label); white-space: nowrap; }
 
@@ -149,9 +166,15 @@
 
 <div id="sidebar">
   <h1>Hextile Designer</h1>
-  <div class="subtitle">Soft-interlocking hexagonal tiles</div>
+  <div class="subtitle">Soft-interlocking game tiles</div>
 
-  <div class="section">Twist Parameters</div>
+  <div class="pill-switch">
+    <input type="radio" name="sides" id="sides-3" value="3"><label for="sides-3">&#9651; Tri</label>
+    <input type="radio" name="sides" id="sides-4" value="4"><label for="sides-4">&#9633; Quad</label>
+    <input type="radio" name="sides" id="sides-6" value="6" checked><label for="sides-6">&#11042; Hex</label>
+  </div>
+
+  <div class="section">Tile Parameters</div>
   <div class="group">
     <label>Twist Angle <span id="v-angle">32.0&deg;</span></label>
     <input type="range" id="angle" min="-55" max="55" step="0.5" value="32">
@@ -203,7 +226,7 @@
 
   <div class="section">Options</div>
   <div class="cb"><label><input type="checkbox" id="angular" checked> Angular joints</label></div>
-  <div class="cb"><label><input type="checkbox" id="show-original"> Show original hex</label></div>
+  <div class="cb"><label><input type="checkbox" id="show-original"> Show original outline</label></div>
   <div class="cb"><label><input type="checkbox" id="show-circles"> Show twist circles</label></div>
   <div class="cb"><label><input type="checkbox" id="show-single" checked> Show isolated tile</label></div>
   <div class="cb"><label><input type="checkbox" id="show-junction" checked> Show tile junction</label></div>
@@ -284,6 +307,7 @@
 //  Constants & utilities
 // ============================================================
 const TAU = Math.PI * 2;
+const sqrt2 = Math.SQRT2;
 const sqrt3 = Math.sqrt(3);
 const cvs = document.getElementById('c');
 const ctx = cvs.getContext('2d');
@@ -339,18 +363,23 @@ cvs.addEventListener('mousemove', e => {
 });
 
 // ============================================================
-//  Hex geometry
+//  Polygon geometry
 // ============================================================
 
-// Flat-top hex vertices (CCW), vertex 0 at the right
-function hexVerts(cx, cy, s) {
+// Regular N-gon vertices, vertex 0 at the right (angle 0).
+// rotOff rotates the whole polygon (used for down-pointing triangles).
+function polyVerts(cx, cy, s, sides, rotOff) {
+  const off = rotOff || 0;
   const v = [];
-  for (let i = 0; i < 6; i++) {
-    const a = TAU * i / 6;            // 0, 60, 120, 180, 240, 300 deg
+  for (let i = 0; i < sides; i++) {
+    const a = TAU * i / sides + off;
     v.push({ x: cx + s * Math.cos(a), y: cy + s * Math.sin(a) });
   }
   return v;
 }
+
+// Convenience wrapper preserving old call sites during migration
+function hexVerts(cx, cy, s) { return polyVerts(cx, cy, s, 6); }
 
 // Axial (q, r) -> pixel centre
 function hex2px(q, r, s) {
@@ -368,6 +397,41 @@ function hexGrid(rings) {
 
 // Proper 3-colouring of the hex grid (no two neighbours share a colour)
 function hexColor3(q, r) { return (((q - r) % 3) + 3) % 3; }
+
+// ---- Square grid ----
+function squareGrid(rings) {
+  const cells = [];
+  for (let row = -rings; row <= rings; row++)
+    for (let col = -rings; col <= rings; col++)
+      cells.push({ col, row });
+  return cells;
+}
+function square2px(col, row, s) {
+  const side = s * sqrt2;  // side length when circumradius = s
+  return { x: side * col, y: side * row };
+}
+function squareColor(col, row) { return (((col + row) % 3) + 3) % 3; }
+
+// ---- Triangle grid ----
+// Each (col, row) has two triangles: up-pointing and down-pointing.
+// Up triangles have vertex at top (rotOff = -π/2), down at bottom (rotOff = π/2).
+function triGrid(rings) {
+  const cells = [];
+  for (let row = -rings; row <= rings; row++)
+    for (let col = -rings * 2; col <= rings * 2; col++) {
+      cells.push({ col, row, up: true });
+      cells.push({ col, row, up: false });
+    }
+  return cells;
+}
+function tri2px(col, row, up, s) {
+  const x = col * s * sqrt3 / 2;
+  const y = row * s * 1.5 + (up ? 0 : s);
+  return { x, y };
+}
+function triColor(col, row, up) {
+  return (((col * 2 + row + (up ? 0 : 1)) % 3) + 3) % 3;
+}
 
 // ============================================================
 //  Modified tile outline  (the core algorithm)
@@ -395,8 +459,9 @@ function hexColor3(q, r) { return (((q - r) % 3) + 3) % 3; }
 // points (V), false for everything else (jog / edge points).
 // This lets us apply different rounding radii to each type.
 
-function tileOutline(cx, cy, s, r, thetaDeg, useAngular) {
-  const verts = hexVerts(cx, cy, s);
+function tileOutline(cx, cy, s, r, thetaDeg, useAngular, sides, rotOff) {
+  const n = sides || 6;
+  const verts = polyVerts(cx, cy, s, n, rotOff);
   if (r < 0.001 || Math.abs(thetaDeg) < 0.01)
     return verts.map(v => ({ x: v.x, y: v.y, vtx: true }));
 
@@ -404,10 +469,10 @@ function tileOutline(cx, cy, s, r, thetaDeg, useAngular) {
   const pts = [];
   const push = (x, y, vtx) => pts.push({ x, y, vtx: !!vtx });
 
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < n; i++) {
     const V  = verts[i];
-    const Vp = verts[(i + 5) % 6];
-    const Vn = verts[(i + 1) % 6];
+    const Vp = verts[(i + n - 1) % n];
+    const Vn = verts[(i + 1) % n];
 
     const ap = Math.atan2(Vp.y - V.y, Vp.x - V.x);
     const an = Math.atan2(Vn.y - V.y, Vn.x - V.x);
@@ -567,6 +632,61 @@ const SCHEMES = [
 ];
 let THEME = SCHEMES[0];
 
+// Shape configurations: sides, vertex valence, max twist, grid/color/layout
+const SHAPES = {
+  6: { sides: 6, name: 'Hexagon',  valence: 3, maxTwist: 55,
+    grid: hexGrid,
+    cell2px: (cell, s) => hex2px(cell.q, cell.r, s),
+    cellColor: cell => hexColor3(cell.q, cell.r),
+    cellRot: () => 0,
+    // 3 hexes sharing vertex 0 of (0,0)
+    junctionCells: () => [
+      { q: 0, r: 0 }, { q: 1, r: 0 }, { q: 1, r: -1 },
+    ],
+    junctionVertex: s => ({ x: s, y: 0 }),
+  },
+  4: { sides: 4, name: 'Square', valence: 4, maxTwist: 45,
+    grid: squareGrid,
+    cell2px: (cell, s) => square2px(cell.col, cell.row, s),
+    cellColor: cell => squareColor(cell.col, cell.row),
+    cellRot: () => Math.PI / 4,
+    // 4 squares sharing top-right corner of (0,0)
+    junctionCells: () => [
+      { col: 0, row: 0 }, { col: 1, row: 0 }, { col: 1, row: -1 }, { col: 0, row: -1 },
+    ],
+    junctionVertex: s => ({ x: s / sqrt2, y: -s / sqrt2 }),
+  },
+  3: { sides: 3, name: 'Triangle', valence: 6, maxTwist: 30,
+    grid: triGrid,
+    cell2px: (cell, s) => tri2px(cell.col, cell.row, cell.up, s),
+    cellColor: cell => triColor(cell.col, cell.row, cell.up),
+    cellRot: cell => cell.up ? -Math.PI / 2 : Math.PI / 2,
+    // 6 triangles sharing top vertex of up(0,0) at (0, -s)
+    junctionCells: () => [
+      { col: 0, row: 0, up: true },
+      { col: -1, row: -1, up: false },
+      { col: -1, row: -1, up: true },
+      { col: 0, row: -2, up: false },
+      { col: 1, row: -1, up: true },
+      { col: 1, row: -1, up: false },
+    ],
+    junctionVertex: s => ({ x: 0, y: -s }),
+  },
+};
+let SHAPE = SHAPES[6];
+
+function setShape(sides) {
+  SHAPE = SHAPES[sides] || SHAPES[6];
+  document.getElementById('sides-' + SHAPE.sides).checked = true;
+  // Clamp twist angle to new max
+  const angleEl = document.getElementById('angle');
+  angleEl.min = -SHAPE.maxTwist;
+  angleEl.max = SHAPE.maxTwist;
+  if (+angleEl.value > SHAPE.maxTwist) angleEl.value = SHAPE.maxTwist;
+  if (+angleEl.value < -SHAPE.maxTwist) angleEl.value = -SHAPE.maxTwist;
+  document.getElementById('v-angle').textContent = (+angleEl.value).toFixed(1) + '\u00B0';
+}
+
 function setScheme(idx) {
   const t = SCHEMES[Math.max(0, Math.min(idx, SCHEMES.length - 1))];
   THEME = t;
@@ -678,9 +798,10 @@ function updateGauge(p) {
   const contactFactor  = Math.min(1, contactArea / refArea);
 
   // ---- 4. Vertex-rounding survival factor ----
-  // Vertex rounding shortens the Q→V arm by ρ_vtx / tan(30°) ≈ 1.73 ρ.
+  // Vertex rounding shortens the Q→V arm by ρ_vtx / tan(half exterior angle).
+  // For hex (6 sides): π/6 → ρ√3.  Adjusts per polygon type.
   // If it eats the entire arm, the tab mechanism is smoothed away entirely.
-  const vtxEat  = rhoVtx / Math.tan(Math.PI / 6);  // ρ√3
+  const vtxEat  = rhoVtx / Math.tan(Math.PI / SHAPE.sides);
   const armLeft = Math.max(0, r - vtxEat);
   const armFrac = r > 0.001 ? armLeft / r : 0;
 
@@ -733,11 +854,12 @@ function updateGauge(p) {
   document.getElementById('gauge-detail').textContent =
     `tab ${mmDepth}mm | face ${mmFace}mm \u00D7 ${thick.toFixed(1)}mm | ${lockStr}  (\u00B5=${MU}, ${exportMm}mm side)`;
 
-  // Hex dimensions: flat-to-flat = s×√3, point-to-point = 2s
-  const ftf = (exportMm * Math.sqrt(3)).toFixed(1);
+  // Polygon dimensions: side length, flat-to-flat (apothem × 2), point-to-point (circumradius × 2)
+  const sideLen = (2 * exportMm * Math.sin(Math.PI / SHAPE.sides)).toFixed(1);
+  const ftf = (2 * exportMm * Math.cos(Math.PI / SHAPE.sides)).toFixed(1);
   const ptp = (exportMm * 2).toFixed(1);
   document.getElementById('hex-dims').textContent =
-    `\u2B21 ${ftf}mm flat\u2011to\u2011flat | ${ptp}mm point\u2011to\u2011point`;
+    `side ${sideLen}mm | ${ftf}mm flat\u2011to\u2011flat | ${ptp}mm vertex\u2011to\u2011vertex`;
 
   // ---- Tab Durability gauge ----
   // Models how easily the tab (protrusion at each jog) can snap off.
@@ -845,7 +967,7 @@ function draw() {
   const oy = cvs.height / 2;
   const s = p.size;
   const r = p.radius * s;
-  const cells = hexGrid(p.gridR);
+  const cells = SHAPE.grid(p.gridR);
   const cosTilt = Math.cos(tiltRad);
   const sinTilt = Math.sin(tiltRad);
   const thickPx = p.thickness * s / p.exportSize;
@@ -874,12 +996,13 @@ function draw() {
 
   // Build tile data, sort back-to-front when tilted
   const tileData = cells.map(cell => {
-    const { x: px, y: py } = hex2px(cell.q, cell.r, s);
+    const { x: px, y: py } = SHAPE.cell2px(cell, s);
     const cx = ox + px * (1 + p.explode);
     const cy = oy + py * (1 + p.explode);
-    let outline = tileOutline(cx, cy, s, r, p.angle, p.angular);
+    const rot = SHAPE.cellRot(cell);
+    let outline = tileOutline(cx, cy, s, r, p.angle, p.angular, SHAPE.sides, rot);
     if (p.roundEdge > 0 || p.roundVtx > 0) outline = roundCorners(outline, p.roundEdge * s, p.roundVtx * s);
-    return { cell, cx, cy, outline, ci: hexColor3(cell.q, cell.r) };
+    return { cell, cx, cy, outline, ci: SHAPE.cellColor(cell), rot };
   });
   if (tilt > 0) tileData.sort((a, b) => a.cy - b.cy);
 
@@ -933,9 +1056,9 @@ function draw() {
     ctx.lineWidth = 1.4;
     ctx.stroke();
 
-    // Optional: original hex outline
+    // Optional: original polygon outline
     if (p.showOrig) {
-      const origProj = hexVerts(td.cx, td.cy, s).map(proj);
+      const origProj = polyVerts(td.cx, td.cy, s, SHAPE.sides, td.rot).map(proj);
       tracePath(origProj);
       ctx.strokeStyle = 'rgba(255,255,255,0.25)';
       ctx.lineWidth = 0.8;
@@ -946,7 +1069,7 @@ function draw() {
 
     // Optional: twist circles at vertices
     if (p.showCirc) {
-      hexVerts(td.cx, td.cy, s).forEach(v => {
+      polyVerts(td.cx, td.cy, s, SHAPE.sides, td.rot).forEach(v => {
         const pv = proj(v);
         const vSc = tilt > 0 ? focalDist / (focalDist - (v.y - oy) * sinTilt) : 1;
         ctx.beginPath();
@@ -994,8 +1117,8 @@ function drawSingleTile(p) {
   ctx.textAlign = 'center';
   ctx.fillText('Single Tile', cx, by + 14);
 
-  // Dashed original hex
-  tracePath(hexVerts(cx, cy, s));
+  // Dashed original polygon
+  tracePath(polyVerts(cx, cy, s, SHAPE.sides));
   ctx.strokeStyle = 'rgba(255,255,255,0.12)';
   ctx.lineWidth = 0.7;
   ctx.setLineDash([3, 3]);
@@ -1003,7 +1126,7 @@ function drawSingleTile(p) {
   ctx.setLineDash([]);
 
   // Twist circles
-  hexVerts(cx, cy, s).forEach(v => {
+  polyVerts(cx, cy, s, SHAPE.sides).forEach(v => {
     ctx.beginPath();
     ctx.arc(v.x, v.y, r, 0, TAU);
     ctx.strokeStyle = 'rgba(233,69,96,0.25)';
@@ -1012,7 +1135,7 @@ function drawSingleTile(p) {
   });
 
   // Modified outline
-  let outline = tileOutline(cx, cy, s, r, p.angle, p.angular);
+  let outline = tileOutline(cx, cy, s, r, p.angle, p.angular, SHAPE.sides);
   if (p.roundEdge > 0 || p.roundVtx > 0) outline = roundCorners(outline, p.roundEdge * s, p.roundVtx * s);
   tracePath(outline);
   ctx.fillStyle = 'rgba(233,69,96,0.2)';
@@ -1025,11 +1148,12 @@ function drawSingleTile(p) {
   // Dot the tab / notch jogs for clarity
   if (Math.abs(p.angle) > 0.5) {
     const theta = deg(p.angle);
-    const verts = hexVerts(cx, cy, s);
-    for (let i = 0; i < 6; i++) {
+    const n = SHAPE.sides;
+    const verts = polyVerts(cx, cy, s, n);
+    for (let i = 0; i < n; i++) {
       const V = verts[i];
-      const Vp = verts[(i + 5) % 6];
-      const Vn = verts[(i + 1) % 6];
+      const Vp = verts[(i + n - 1) % n];
+      const Vn = verts[(i + 1) % n];
       const ap = Math.atan2(Vp.y - V.y, Vp.x - V.x);
       const an = Math.atan2(Vn.y - V.y, Vn.x - V.x);
 
@@ -1066,7 +1190,9 @@ function drawJunction(p) {
   const bw = OVERLAY_BOX, bh = OVERLAY_BOX;
   const bx = cvs.width - bw - 12;
   const by = cvs.height - bh - 12;
-  const s = Math.min(p.size * 4.0, (bw - pad * 2) / 1.44);
+  // More tiles at a vertex → need more zoom-out
+  const scaleFactor = SHAPE.valence <= 3 ? 4.0 : SHAPE.valence <= 4 ? 3.2 : 2.4;
+  const s = Math.min(p.size * scaleFactor, (bw - pad * 2) / 1.44);
   const r = p.radius * s;
   const cx = bx + bw / 2;
   const cy = by + bh / 2;
@@ -1086,22 +1212,13 @@ function drawJunction(p) {
   ctx.textAlign = 'center';
   ctx.fillText('Tile Junction', cx, by + 14);
 
-  // The three tiles meeting at a vertex:
-  // Use the right-most vertex (angle 0) of the center hex.
-  // The three hexes sharing that vertex are:
-  //   (0,0), (1,0), (1,-1)  in axial coords
-  const trio = [
-    { q: 0, r: 0,  ci: 0 },
-    { q: 1, r: 0,  ci: 1 },
-    { q: 1, r: -1, ci: 2 },
-  ];
+  // Get junction tiles and shared vertex from shape config
+  const jCells = SHAPE.junctionCells();
+  const sharedVtx = SHAPE.junctionVertex(s);
 
-  // Shared vertex is vertex 0 of the (0,0) hex in pixel space
-  const hex0center = hex2px(0, 0, s);
-  const sharedVtxPx = { x: hex0center.x + s, y: hex0center.y };
-  // Offset to place the shared vertex exactly at the center of the inset box
-  const offX = cx - sharedVtxPx.x;
-  const offY = cy - sharedVtxPx.y;
+  // Offset to place the shared vertex at the center of the inset box
+  const offX = cx - sharedVtx.x;
+  const offY = cy - sharedVtx.y;
 
   // Clip to the box
   ctx.save();
@@ -1109,15 +1226,16 @@ function drawJunction(p) {
   ctx.roundRect(bx, by + 20, bw, bh - 20, [0, 0, 10, 10]);
   ctx.clip();
 
-  trio.forEach(t => {
-    const { x: px, y: py } = hex2px(t.q, t.r, s);
-    const hcx = offX + px;
-    const hcy = offY + py;
-    let outline = tileOutline(hcx, hcy, s, r, p.angle, p.angular);
+  jCells.forEach((cell, i) => {
+    const { x: px, y: py } = SHAPE.cell2px(cell, s);
+    const tcx = offX + px;
+    const tcy = offY + py;
+    const rot = SHAPE.cellRot(cell);
+    let outline = tileOutline(tcx, tcy, s, r, p.angle, p.angular, SHAPE.sides, rot);
     if (p.roundEdge > 0 || p.roundVtx > 0) outline = roundCorners(outline, p.roundEdge * s, p.roundVtx * s);
 
     tracePath(outline);
-    ctx.fillStyle = THEME.colors[t.ci];
+    ctx.fillStyle = THEME.colors[SHAPE.cellColor(cell)];
     ctx.globalAlpha = 0.7;
     ctx.fill();
     ctx.globalAlpha = 1;
@@ -1127,8 +1245,8 @@ function drawJunction(p) {
     ctx.lineWidth = 1.6;
     ctx.stroke();
 
-    // Dashed original hex
-    tracePath(hexVerts(hcx, hcy, s));
+    // Dashed original polygon
+    tracePath(polyVerts(tcx, tcy, s, SHAPE.sides, rot));
     ctx.strokeStyle = 'rgba(255,255,255,0.15)';
     ctx.lineWidth = 0.6;
     ctx.setLineDash([2, 2]);
@@ -1136,7 +1254,7 @@ function drawJunction(p) {
     ctx.setLineDash([]);
   });
 
-  // Draw twist circle at the shared vertex (now centered in box)
+  // Draw twist circle at the shared vertex (centered in box)
   const svx = cx;
   const svy = cy;
   ctx.beginPath();
@@ -1150,9 +1268,9 @@ function drawJunction(p) {
   // Show original vs rotated edge directions at the shared vertex
   if (Math.abs(p.angle) > 0.5) {
     const theta = deg(p.angle);
-    // The three edges meeting at this vertex go outward at 0°, 120°, 240°
-    const edgeAngles = [0, TAU / 3, 2 * TAU / 3];
-    edgeAngles.forEach(ea => {
+    // Edges radiate at equal intervals: TAU / valence
+    for (let i = 0; i < SHAPE.valence; i++) {
+      const ea = TAU * i / SHAPE.valence;
       // Original edge (dim)
       ctx.beginPath();
       ctx.moveTo(svx, svy);
@@ -1169,7 +1287,7 @@ function drawJunction(p) {
       ctx.lineWidth = 1.2;
       ctx.setLineDash([]);
       ctx.stroke();
-    });
+    }
   }
 
   ctx.restore();
@@ -1195,7 +1313,7 @@ document.getElementById('export-btn').addEventListener('click', () => {
   const p = getP();
   const s = p.exportSize;                // mm side length from input
   const r = p.radius * s;
-  let pts = tileOutline(0, 0, s, r, p.angle, p.angular);
+  let pts = tileOutline(0, 0, s, r, p.angle, p.angular, SHAPE.sides);
   if (p.roundEdge > 0 || p.roundVtx > 0) pts = roundCorners(pts, p.roundEdge * s, p.roundVtx * s);
 
   // Flip Y so SVG matches standard orientation
@@ -1218,7 +1336,8 @@ document.getElementById('export-btn').addEventListener('click', () => {
   <path d="${d}" fill="none" stroke="black" stroke-width="0.1"/>
 </svg>`;
 
-  downloadSVG(svg, `hex-twist-${p.angle}deg-r${(p.radius * 100).toFixed(0)}.svg`);
+  const shapeName = SHAPE.name.toLowerCase();
+  downloadSVG(svg, `${shapeName}-twist-${p.angle}deg-r${(p.radius * 100).toFixed(0)}.svg`);
 });
 
 // Grid SVG export — all tiles in the current grid
@@ -1226,14 +1345,15 @@ document.getElementById('export-grid-btn').addEventListener('click', () => {
   const p = getP();
   const s = p.exportSize;
   const r = p.radius * s;
-  const cells = hexGrid(p.gridR);
+  const cells = SHAPE.grid(p.gridR);
 
   const paths = [];
   let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
 
   for (const cell of cells) {
-    const { x: px, y: py } = hex2px(cell.q, cell.r, s);
-    let pts = tileOutline(px, py, s, r, p.angle, p.angular);
+    const { x: px, y: py } = SHAPE.cell2px(cell, s);
+    const rot = SHAPE.cellRot(cell);
+    let pts = tileOutline(px, py, s, r, p.angle, p.angular, SHAPE.sides, rot);
     if (p.roundEdge > 0 || p.roundVtx > 0) pts = roundCorners(pts, p.roundEdge * s, p.roundVtx * s);
     const fp = pts.map(pt => ({ x: pt.x, y: -pt.y }));
     for (const pt of fp) {
@@ -1259,7 +1379,8 @@ document.getElementById('export-grid-btn').addEventListener('click', () => {
   ${paths.map(d => `<path d="${d}" fill="none" stroke="black" stroke-width="0.1"/>`).join('\n  ')}
 </svg>`;
 
-  downloadSVG(svg, `hex-grid-${p.angle}deg-r${(p.radius * 100).toFixed(0)}-${cells.length}tiles.svg`);
+  const shapeName = SHAPE.name.toLowerCase();
+  downloadSVG(svg, `${shapeName}-grid-${p.angle}deg-r${(p.radius * 100).toFixed(0)}-${cells.length}tiles.svg`);
 });
 
 // ============================================================
@@ -1273,6 +1394,7 @@ function saveToUrl() {
   sliders.forEach(s => params.set(s.id, document.getElementById(s.id).value));
   CHECKBOXES.forEach(id => params.set(id, document.getElementById(id).checked ? '1' : '0'));
   params.set('scheme', document.getElementById('scheme').value);
+  params.set('sides', SHAPE.sides);
   history.replaceState(null, '', '#' + params.toString());
 }
 
@@ -1294,6 +1416,9 @@ function loadFromUrl() {
     const idx = +params.get('scheme');
     document.getElementById('scheme').value = idx;
     setScheme(idx);
+  }
+  if (params.has('sides')) {
+    setShape(+params.get('sides'));
   }
 }
 
@@ -1336,6 +1461,12 @@ document.getElementById('scheme').addEventListener('change', () => {
   setScheme(+document.getElementById('scheme').value);
   onInput();
 });
+document.querySelectorAll('input[name="sides"]').forEach(radio =>
+  radio.addEventListener('change', () => {
+    setShape(+radio.value);
+    onInput();
+  })
+);
 // ============================================================
 //  Canvas sizing & kick-off
 // ============================================================
