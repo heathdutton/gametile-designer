@@ -1,8 +1,10 @@
-# Hextiles
+# Hextile Designer
 
 Interactive design tool for laser-cut hexagonal board game tiles that interlock via a twist mechanism at 3-tile vertex junctions.
 
 **[Try it live](https://heathdutton.github.io/hextiles/)**
+
+![Hextile Designer](screenshot.png)
 
 ## Features
 
