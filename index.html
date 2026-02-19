@@ -175,6 +175,7 @@
   </div>
 
   <button id="export-btn">Export Tile as SVG</button>
+  <button id="export-grid-btn">Export Tile Grid as SVG</button>
 
   <div class="info">
     At each vertex where 3 tiles meet, the edges are "twisted" by the twist
@@ -183,6 +184,7 @@
     but resistant to sliding apart. The tiles still meet at each vertex point
     (no voids). Tab depth &asymp; r &times; sin(&theta;).
   </div>
+  <a href="https://github.com/heathdutton/hextiles" target="_blank" style="display:block; margin-top:16px; font-size:11px; color:#555; text-decoration:none;">github.com/heathdutton/hextiles</a>
 </div>
 
 <div id="main">
@@ -583,11 +585,19 @@ function updateGauge(p) {
   // ---- Tab Durability gauge ----
   // Models how easily the tab (protrusion at each jog) can snap off.
   // The tab is a cantilever beam: lateral force creates bending moment
-  // at the base.  Breaking force ∝ base_width × thickness² / depth.
+  // at the base.  Breaking force ∝ base_width × thickness² / (depth × Kt).
   //
   // Factor 1 (beam bending, scale-invariant):
   //   base/depth = 1/cos(|θ|/2) → bendStrength = t² / cos(|θ|/2)
   //   Thickness dominates quadratically.
+  //
+  //   Stress concentration at the tab base:
+  //   A sharp corner (no edge rounding) concentrates stress enormously —
+  //   the classic cause of fatigue failure.  Edge rounding creates a
+  //   fillet of radius ρ, reducing the concentration factor:
+  //     Kt = 1 + 2√(depth / ρ)          (Peterson, filleted step)
+  //   For wood, grain yielding limits the practical max to ~4.
+  //   Effective bending strength is bendStrength / Kt.
   //
   // Factor 2 (absolute size):
   //   Sub-2mm features are vulnerable to grain defects and laser kerf.
@@ -600,8 +610,15 @@ function updateGauge(p) {
     : Math.min(1, 1 - Math.exp(-3 * effectiveDepthMm));
   const effectivePresence = presence * armFrac;
 
+  // Stress concentration factor at tab base fillet
+  const rhoEdgeMm = rhoEdge * scaleMm;
+  const KT_MAX    = 4.0;   // practical ceiling for wood (grain yields)
+  const Kt = rhoEdgeMm > 0.01
+    ? Math.min(KT_MAX, 1 + 2 * Math.sqrt(effectiveDepthMm / rhoEdgeMm))
+    : KT_MAX;
+
   const bendStrength = thick * thick / Math.cos(absRad / 2);
-  const bendFactor   = 1 - Math.exp(-bendStrength / 3.0);
+  const bendFactor   = 1 - Math.exp(-bendStrength / (3.0 * Kt));
 
   const minCross   = Math.min(jogChordMm, thick);
   const sizeFactor = 1 - Math.exp(-minCross / 2.0);
@@ -630,8 +647,9 @@ function updateGauge(p) {
   durReadout.textContent = durLabel;
   durReadout.style.color = durColor;
 
+  const ktStr = Kt < KT_MAX ? `Kt=${Kt.toFixed(1)}` : `Kt=${KT_MAX.toFixed(0)} (no fillet)`;
   document.getElementById('dur-detail').textContent =
-    `base ${jogChordMm.toFixed(1)}mm \u00D7 ${thick.toFixed(1)}mm | depth ${effectiveDepthMm.toFixed(1)}mm | min section ${minCross.toFixed(1)}mm`;
+    `base ${jogChordMm.toFixed(1)}mm \u00D7 ${thick.toFixed(1)}mm | ${ktStr} | min ${minCross.toFixed(1)}mm`;
 }
 
 // ============================================================
@@ -969,6 +987,51 @@ document.getElementById('export-btn').addEventListener('click', () => {
   const a = document.createElement('a');
   a.href = url;
   a.download = `hex-twist-${p.angle}deg-r${(p.radius * 100).toFixed(0)}.svg`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+
+// Grid SVG export — all tiles in the current grid
+document.getElementById('export-grid-btn').addEventListener('click', () => {
+  const p = getP();
+  const s = p.exportSize;
+  const r = p.radius * s;
+  const cells = hexGrid(p.gridR);
+
+  const paths = [];
+  const allXs = [], allYs = [];
+
+  cells.forEach(cell => {
+    const { x: px, y: py } = hex2px(cell.q, cell.r, s);
+    let pts = tileOutline(px, py, s, r, p.angle, p.angular);
+    if (p.roundEdge > 0 || p.roundVtx > 0) pts = roundCorners(pts, p.roundEdge * s, p.roundVtx * s);
+    // Flip Y for SVG standard orientation
+    const fp = pts.map(pt => ({ x: pt.x, y: -pt.y }));
+    fp.forEach(pt => { allXs.push(pt.x); allYs.push(pt.y); });
+    paths.push(fp.map((pt, i) =>
+      (i === 0 ? 'M' : 'L') + pt.x.toFixed(4) + ' ' + pt.y.toFixed(4)
+    ).join(' ') + ' Z');
+  });
+
+  const margin = 1;
+  const mx = Math.min(...allXs) - margin, my = Math.min(...allYs) - margin;
+  const Mx = Math.max(...allXs) + margin, My = Math.max(...allYs) + margin;
+
+  const svg =
+`<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="${mx} ${my} ${Mx - mx} ${My - my}"
+     width="${(Mx - mx).toFixed(2)}mm" height="${(My - my).toFixed(2)}mm">
+  ${paths.map(d => `<path d="${d}" fill="none" stroke="black" stroke-width="0.1"/>`).join('\n  ')}
+</svg>`;
+
+  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `hex-grid-${p.angle}deg-r${(p.radius * 100).toFixed(0)}-${cells.length}tiles.svg`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
