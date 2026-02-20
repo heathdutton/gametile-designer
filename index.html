@@ -997,8 +997,17 @@ function updateGauge(p) {
   const minBody   = Math.min(waistMm, thick);
   const bodyScore = minBody < 0.01 ? 0 : Math.min(1, 1 - Math.exp(-minBody / 2.0));
 
-  // Overall durability: weakest link
-  const durability = Math.min(tabScore, bodyScore);
+  // -- Edge wear (handling attrition) --
+  // Sharper vertex angles wear down faster with use. Rounding mitigates.
+  // Triangle 60° tips are fragile; hex 120° corners barely affected.
+  const vtxAngle     = (SHAPE.sides - 2) * Math.PI / SHAPE.sides;
+  const sharpness    = 1 - vtxAngle / Math.PI;  // tri 0.67, sq 0.5, hex 0.33
+  const rhoVtxMm     = rhoVtx * scaleMm;
+  const roundProtect = 1 - Math.exp(-(rhoEdgeMm + rhoVtxMm) / 0.8);
+  const wearFactor   = 1 - sharpness * (1 - roundProtect) * 0.35;
+
+  // Overall durability: weakest link, then wear
+  const durability = Math.min(tabScore, bodyScore) * wearFactor;
   const durPct     = Math.min(1, Math.max(0, durability));
 
   document.getElementById('dur-pip').style.left = ((1 - durPct) * 100) + '%';
@@ -1650,8 +1659,8 @@ function resize() {
   // Zero canvas so its old intrinsic size doesn't inflate the container
   cvs.width = 1;
   cvs.height = 1;
-  cvs.width  = Math.max(100, main.clientWidth  - 40);
-  cvs.height = Math.max(100, main.clientHeight - 40);
+  cvs.width  = Math.max(100, main.clientWidth);
+  cvs.height = Math.max(100, main.clientHeight);
   draw();
 }
 document.getElementById('close-stats-btn').addEventListener('click', () => {
