@@ -413,24 +413,24 @@ function square2px(col, row, s) {
 function squareColor(col, row) { return (((col + row) % 3) + 3) % 3; }
 
 // ---- Triangle grid ----
-// Each (col, row) has two triangles: up-pointing and down-pointing.
+// One triangle per (col, row). Orientation from parity: up when (col+row) even.
 // Up triangles have vertex at top (rotOff = -π/2), down at bottom (rotOff = π/2).
 function triGrid(rings) {
   const cells = [];
   for (let row = -rings; row <= rings; row++)
-    for (let col = -rings * 2; col <= rings * 2; col++) {
-      cells.push({ col, row, up: true });
-      cells.push({ col, row, up: false });
+    for (let col = -(rings * 2); col <= (rings * 2); col++) {
+      const up = ((col + row) & 1) === 0;
+      cells.push({ col, row, up });
     }
   return cells;
 }
 function tri2px(col, row, up, s) {
   const x = col * s * sqrt3 / 2;
-  const y = row * s * 1.5 + (up ? 0 : s);
+  const y = row * s * 1.5 + (up ? 0 : -s / 2);
   return { x, y };
 }
-function triColor(col, row, up) {
-  return (((col * 2 + row + (up ? 0 : 1)) % 3) + 3) % 3;
+function triColor(col, row) {
+  return (((col + 2 * row) % 3) + 3) % 3;
 }
 
 // ============================================================
@@ -659,16 +659,16 @@ const SHAPES = {
   3: { sides: 3, name: 'Triangle', valence: 6, maxTwist: 30,
     grid: triGrid,
     cell2px: (cell, s) => tri2px(cell.col, cell.row, cell.up, s),
-    cellColor: cell => triColor(cell.col, cell.row, cell.up),
+    cellColor: cell => triColor(cell.col, cell.row),
     cellRot: cell => cell.up ? -Math.PI / 2 : Math.PI / 2,
     // 6 triangles sharing top vertex of up(0,0) at (0, -s)
     junctionCells: () => [
       { col: 0, row: 0, up: true },
-      { col: -1, row: -1, up: false },
-      { col: -1, row: -1, up: true },
-      { col: 0, row: -2, up: false },
+      { col: 1, row: 0, up: false },
       { col: 1, row: -1, up: true },
-      { col: 1, row: -1, up: false },
+      { col: 0, row: -1, up: false },
+      { col: -1, row: -1, up: true },
+      { col: -1, row: 0, up: false },
     ],
     junctionVertex: s => ({ x: 0, y: -s }),
   },
