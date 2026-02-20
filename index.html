@@ -3,16 +3,37 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gametile Designer — Interlocking Game Tile Generator for Laser Cutting</title>
-<meta name="description" content="Interactive design tool for laser-cut board game tiles (triangle, square, hexagon) with interlocking twist joints. Adjust twist angle, radius, rounding, and thickness. Export SVG for laser cutting.">
-<meta property="og:title" content="Gametile Designer">
-<meta property="og:description" content="Design interlocking game tiles for laser cutting. Triangle, square, and hexagon shapes with twist-lock joints. Export SVG.">
+<title>Gametile Designer — Interlocking Board Game Tile Generator for Laser Cutting</title>
+<meta name="description" content="Free interactive tool to design interlocking laser-cut board game tiles. Triangle, square, and hexagon shapes with twist-lock joints. Adjust angle, radius, rounding, thickness. Physics-based interlock and durability gauges. Export production-ready SVG.">
+<meta name="keywords" content="board game tiles, laser cutting, hex tiles, triangle tiles, square tiles, interlocking tiles, twist joint, SVG export, game tile designer, tabletop game, Catan tiles, laser cut wood, tile generator">
+<meta name="author" content="Heath Dutton">
+<meta name="robots" content="index, follow">
+<meta property="og:title" content="Gametile Designer — Interlocking Tile Generator">
+<meta property="og:description" content="Free tool to design interlocking laser-cut board game tiles. Triangle, square, hexagon with twist-lock joints. Adjust parameters, preview in 3D, export SVG.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://heathdutton.github.io/gametile-designer/">
-<meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Gametile Designer">
-<meta name="twitter:description" content="Interactive game tile designer with twist-lock joints for laser-cut board game tiles. Triangle, square, hexagon. Export SVG.">
+<meta property="og:image" content="https://heathdutton.github.io/gametile-designer/screenshot.png">
+<meta property="og:image:alt" content="Gametile Designer showing interlocking hexagon tiles with twist joints">
+<meta property="og:site_name" content="Gametile Designer">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Gametile Designer — Interlocking Tile Generator">
+<meta name="twitter:description" content="Design interlocking laser-cut board game tiles. Triangle, square, hexagon with twist-lock joints. Free, no install. Export SVG.">
+<meta name="twitter:image" content="https://heathdutton.github.io/gametile-designer/screenshot.png">
 <link rel="canonical" href="https://heathdutton.github.io/gametile-designer/">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Gametile Designer",
+  "url": "https://heathdutton.github.io/gametile-designer/",
+  "description": "Interactive design tool for interlocking laser-cut board game tiles with twist-lock joints. Supports triangle, square, and hexagon shapes. Export SVG for laser cutting.",
+  "applicationCategory": "DesignApplication",
+  "operatingSystem": "Any",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "screenshot": "https://heathdutton.github.io/gametile-designer/screenshot.png",
+  "author": { "@type": "Person", "name": "Heath Dutton" }
+}
+</script>
 <style>
   :root {
     --bg: #1a1a2e;
@@ -286,11 +307,12 @@
     but resistant to sliding apart. Tiles still meet at each vertex point
     (no voids). Tab depth &asymp; r &times; sin(&theta;).
   </div>
-  <a href="https://github.com/heathdutton/gametile-designer" target="_blank" rel="noopener noreferrer" style="display:block; margin-top:16px; font-size:11px; color:var(--muted); text-decoration:none;">github.com/heathdutton/gametile-designer</a>
+  <a href="https://github.com/heathdutton/gametile-designer" target="_blank" rel="noopener noreferrer" style="display:inline-flex; align-items:center; gap:6px; margin-top:16px; font-size:12px; color:var(--label); text-decoration:none; border:1px solid var(--border); border-radius:6px; padding:6px 12px; transition:border-color 0.15s, color 0.15s;" onmouseover="this.style.borderColor=this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--label)'"><svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
 </div>
 
 <div id="main">
-  <canvas id="c">Tile preview</canvas>
+  <canvas id="c" role="img" aria-label="Interactive board game tile preview with interlocking twist joints">Tile preview — requires JavaScript</canvas>
+  <noscript><p style="color:#eee;text-align:center;padding:40px;">Gametile Designer requires JavaScript to run. Please enable JavaScript in your browser.</p></noscript>
   <div id="stats-overlay">
     <button class="overlay-close" id="close-stats-btn" aria-label="Close stats">&times;</button>
     <div class="gauge">
