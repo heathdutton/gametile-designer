@@ -260,7 +260,7 @@
 
   <div class="group">
     <label>Edge Rounding <span id="v-round-edge">0.030 &times; side</span></label>
-    <input type="range" id="round-edge" min="0" max="1.0" step="0.005" value="0.03">
+    <input type="range" id="round-edge" min="0" max="0.1" step="0.001" value="0.03">
   </div>
   <div class="group">
     <label>Vertex Rounding <span id="v-round-vtx">0.030 &times; side</span></label>
@@ -1620,7 +1620,7 @@ document.getElementById('randomize-btn').addEventListener('click', () => {
   const tileSliders = [
     { id: 'angle',       vid: 'v-angle',       min: -SHAPE.maxTwist, max: SHAPE.maxTwist, step: 0.5, fmt: v => v.toFixed(1) + '\u00B0' },
     { id: 'radius',      vid: 'v-radius',      min: 0.05, max: 0.45, step: 0.01, fmt: v => v.toFixed(2) + ' \u00D7 side' },
-    { id: 'round-edge',  vid: 'v-round-edge',  min: 0, max: 0.5, step: 0.005, fmt: v => (+v).toFixed(3) + ' \u00D7 side' },
+    { id: 'round-edge',  vid: 'v-round-edge',  min: 0, max: 0.1, step: 0.001, fmt: v => (+v).toFixed(3) + ' \u00D7 side' },
     { id: 'round-vtx',   vid: 'v-round-vtx',   min: 0, max: 0.15, step: 0.005, fmt: v => (+v).toFixed(3) + ' \u00D7 side' },
     { id: 'thickness',   vid: 'v-thickness',    min: 1, max: 5, step: 0.1, fmt: v => (+v).toFixed(1) + ' mm' },
     { id: 'export-size', vid: 'v-export-size',  min: 15, max: 50, step: 1, fmt: v => v + ' mm' },
