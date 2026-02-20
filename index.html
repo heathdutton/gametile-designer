@@ -361,7 +361,7 @@
   <div id="stats-overlay">
     <button class="overlay-close" id="close-stats-btn" aria-label="Close stats">&times;</button>
     <div class="gauge">
-      <div class="gauge-label">Interlock Feel</div>
+      <div class="gauge-label">Feel</div>
       <div class="gauge-track"><div class="gauge-pip" id="gauge-pip"></div></div>
       <div class="gauge-labels">
         <span>Loose</span>
@@ -373,7 +373,7 @@
       <div class="gauge-detail" id="gauge-detail"></div>
     </div>
     <div class="gauge">
-      <div class="gauge-label">Tab Durability</div>
+      <div class="gauge-label">Durability</div>
       <div class="gauge-track" style="background: linear-gradient(to right, #2a9d8f, #8ab840 35%, #f4a261 60%, #e94560 80%, #a00030);">
         <div class="gauge-pip" id="dur-pip"></div>
       </div>
@@ -961,35 +961,20 @@ function updateGauge(p) {
   document.getElementById('hex-dims').textContent =
     `side ${dimSide}mm | ${ftf}mm flat\u2011to\u2011flat | ${ptp}mm vertex\u2011to\u2011vertex`;
 
-  // ---- Tab Durability gauge ----
-  // Models how easily the tab (protrusion at each jog) can snap off.
-  // The tab is a cantilever beam: lateral force creates bending moment
-  // at the base.  Breaking force ∝ base_width × thickness² / (depth × Kt).
+  // ---- Durability gauge ----
+  // Two failure modes:
+  //   1. Tab snap — the tab (protrusion at each jog) breaks off.
+  //   2. Body snap — the tile interior becomes too thin between notches.
   //
-  // Factor 1 (beam bending, scale-invariant):
-  //   base/depth = 1/cos(|θ|/2) → bendStrength = t² / cos(|θ|/2)
-  //   Thickness dominates quadratically.
-  //
-  //   Stress concentration at the tab base:
-  //   A sharp corner (no edge rounding) concentrates stress enormously —
-  //   the classic cause of fatigue failure.  Edge rounding creates a
-  //   fillet of radius ρ, reducing the concentration factor:
-  //     Kt = 1 + 2√(depth / ρ)          (Peterson, filleted step)
-  //   For wood, grain yielding limits the practical max to ~4.
-  //   Effective bending strength is bendStrength / Kt.
-  //
-  // Factor 2 (absolute size):
-  //   Sub-2mm features are vulnerable to grain defects and laser kerf.
-  //   min(base_width_mm, thickness) penalizes small cross-sections.
-  //
-  // Gated by tab presence (no tab = nothing to break = max durability).
-  // Vertex rounding at V doesn't affect tab strength (jog is at Q, far from V).
+  // Tab: cantilever beam, bending at base. Kt from Peterson fillet model.
+  // Body: apothem minus notch depth gives remaining waist width.
+  //   Triangles are especially vulnerable (apothem ≈ 0.29 × side).
 
   const effectivePresence = depthPresence;
 
-  // Stress concentration factor at tab base fillet
+  // -- Tab strength --
   const rhoEdgeMm = rhoEdge * scaleMm;
-  const KT_MAX    = 4.0;   // practical ceiling for wood (grain yields)
+  const KT_MAX    = 4.0;
   const Kt = rhoEdgeMm > 0.01
     ? Math.min(KT_MAX, 1 + 2 * Math.sqrt(effectiveDepthMm / rhoEdgeMm))
     : KT_MAX;
@@ -1001,8 +986,20 @@ function updateGauge(p) {
   const sizeFactor = 1 - Math.exp(-minCross / 2.0);
 
   const tabDurability = 0.6 * bendFactor + 0.4 * sizeFactor;
-  const durability    = 1.0 - effectivePresence * (1.0 - tabDurability);
-  const durPct        = Math.min(1, Math.max(0, durability));
+  const tabScore      = 1.0 - effectivePresence * (1.0 - tabDurability);
+
+  // -- Body strength (inner waist) --
+  // Apothem = perpendicular distance from center to edge midpoint.
+  // Notch depth eats inward from the edge. When depth ≈ apothem the
+  // tile is nearly bisected and will snap across the middle.
+  const apothemMm = exportMm / (2 * Math.tan(Math.PI / SHAPE.sides));
+  const waistMm   = Math.max(0, apothemMm - effectiveDepthMm);
+  const minBody   = Math.min(waistMm, thick);
+  const bodyScore = minBody < 0.01 ? 0 : Math.min(1, 1 - Math.exp(-minBody / 2.0));
+
+  // Overall durability: weakest link
+  const durability = Math.min(tabScore, bodyScore);
+  const durPct     = Math.min(1, Math.max(0, durability));
 
   document.getElementById('dur-pip').style.left = ((1 - durPct) * 100) + '%';
 
@@ -1025,8 +1022,9 @@ function updateGauge(p) {
   durReadout.style.color = durColor;
 
   const ktStr = Kt < KT_MAX ? `Kt=${Kt.toFixed(1)}` : `Kt=${KT_MAX.toFixed(0)} (no fillet)`;
+  const waistStr = waistMm < apothemMm * 0.99 ? ` | waist ${waistMm.toFixed(1)}mm` : '';
   document.getElementById('dur-detail').textContent =
-    `base ${jogChordMm.toFixed(1)}mm \u00D7 ${thick.toFixed(1)}mm | ${ktStr} | min ${minCross.toFixed(1)}mm`;
+    `base ${jogChordMm.toFixed(1)}mm \u00D7 ${thick.toFixed(1)}mm | ${ktStr}${waistStr}`;
 }
 
 // ============================================================
