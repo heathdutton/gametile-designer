@@ -581,24 +581,14 @@ function roundCorners(pts, edgeRadius, vtxRadius) {
   const out = [];
   const ARC_SEGS = 6;
 
-  // Find nearest non-smooth neighbor in each direction
-  function findNonSmooth(from, dir) {
-    for (let k = 1; k < n; k++) {
-      const idx = (from + dir * k + n * k) % n;
-      if (!pts[idx].smooth) return pts[idx];
-    }
-    return pts[(from + dir + n) % n];
-  }
-
   for (let i = 0; i < n; i++) {
+    const A = pts[(i - 1 + n) % n];
     const B = pts[i];
+    const C = pts[(i + 1) % n];
+
     if (B.smooth) { out.push(B); continue; }
     const radius = B.vtx ? vtxRadius : edgeRadius;
     if (radius < 0.001) { out.push(B); continue; }
-
-    // Skip smooth points to find effective neighbors
-    const A = findNonSmooth(i, -1);
-    const C = findNonSmooth(i, 1);
 
     let dxBA = A.x - B.x, dyBA = A.y - B.y;
     let dxBC = C.x - B.x, dyBC = C.y - B.y;
