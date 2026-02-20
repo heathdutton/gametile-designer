@@ -81,13 +81,12 @@
   }
   h1 { font-size: 20px; margin-bottom: 4px; color: var(--accent); }
   .subtitle { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
-  .section button {
+  .section-wrap summary button {
     font-size: 10px; color: var(--muted); background: none; border: 1px solid var(--border);
     border-radius: 4px; padding: 2px 8px; cursor: pointer; float: right;
     transition: color 0.15s, border-color 0.15s; text-transform: none; letter-spacing: 0;
   }
-  .section button:hover { color: var(--accent); border-color: var(--accent); }
-  .section { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 20px 0 10px; border-top: 1px solid var(--border); padding-top: 14px; }
+  .section-wrap summary button:hover { color: var(--accent); border-color: var(--accent); }
   .group { margin-bottom: 14px; }
   .group > label { display: block; font-size: 13px; margin-bottom: 4px; color: var(--label); }
   .group label span { float: right; color: var(--accent); font-weight: bold; }
@@ -200,12 +199,13 @@
   }
   #sidebar-toggle:active { transform: scale(0.9); }
 
-  /* Collapsible sections */
-  .section { cursor: pointer; user-select: none; }
-  .section::after { content: '\25B2'; float: right; font-size: 8px; margin-top: 2px; transition: transform 0.2s; }
-  .section.collapsed::after { transform: rotate(180deg); }
-  .section-body { overflow: hidden; transition: max-height 0.25s ease, opacity 0.2s; max-height: 800px; opacity: 1; }
-  .section-body.collapsed { max-height: 0; opacity: 0; }
+  /* Collapsible sections (native details/summary) */
+  .section-wrap { margin-top: 20px; border-top: 1px solid var(--border); padding-top: 14px; }
+  .section-wrap summary {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--muted); cursor: pointer; user-select: none; list-style: disclosure-closed;
+  }
+  .section-wrap[open] summary { list-style: disclosure-open; }
 
   /* Mobile layout */
   @media (max-width: 768px) {
@@ -235,8 +235,8 @@
   <h1>Gametile Designer</h1>
   <div class="subtitle">Soft-interlocking game tiles</div>
 
-  <div class="section" data-section="params">Tile Parameters <button id="randomize-btn">Randomize</button></div>
-  <div class="section-body" data-section="params">
+  <details class="section-wrap" open>
+  <summary>Tile Parameters <button id="randomize-btn">Randomize</button></summary>
   <div class="pill-switch" style="margin-bottom:10px">
     <input type="radio" name="sides" id="sides-3" value="3"><label for="sides-3">&#9651; Tri</label>
     <input type="radio" name="sides" id="sides-4" value="4"><label for="sides-4">&#9633; Quad</label>
@@ -275,10 +275,10 @@
     <input type="range" id="export-size" min="10" max="60" step="1" value="30">
   </div>
   <div class="gauge-detail" id="hex-dims"></div>
-  </div>
+  </details>
 
-  <div class="section" data-section="display">Display Options <button id="randomize-display-btn">Randomize</button></div>
-  <div class="section-body" data-section="display">
+  <details class="section-wrap" open>
+  <summary>Display Options <button id="randomize-display-btn">Randomize</button></summary>
   <div class="group">
     <label>Theme
       <select id="scheme" style="float: right;">
@@ -316,7 +316,7 @@
   <div class="cb"><label><input type="checkbox" id="show-single" checked> Show isolated tile</label></div>
   <div class="cb"><label><input type="checkbox" id="show-junction" checked> Show tile junction</label></div>
   <div class="cb"><label><input type="checkbox" id="show-stats" checked> Show stats</label></div>
-  </div>
+  </details>
 
   <button id="export-btn">Export Tile as SVG</button>
   <button id="export-grid-btn">Export Tile Grid as SVG</button>
@@ -1698,22 +1698,16 @@ document.getElementById('close-stats-btn').addEventListener('click', () => {
 setScheme(0);
 loadFromUrl();
 syncPerspVisibility();
+// Prevent Randomize buttons inside <summary> from toggling the <details>
+document.querySelectorAll('.section-wrap summary button').forEach(btn => {
+  btn.addEventListener('click', e => e.preventDefault());
+});
+
 // ---- Mobile sidebar toggle ----
 document.getElementById('sidebar-toggle').addEventListener('click', () => {
   const sb = document.getElementById('sidebar');
   sb.classList.toggle('hidden');
   resize();
-});
-
-// ---- Collapsible sections ----
-document.querySelectorAll('.section[data-section]').forEach(hdr => {
-  hdr.addEventListener('click', e => {
-    if (e.target.tagName === 'BUTTON') return; // don't toggle when clicking Randomize
-    const key = hdr.dataset.section;
-    const body = document.querySelector('.section-body[data-section="' + key + '"]');
-    hdr.classList.toggle('collapsed');
-    body.classList.toggle('collapsed');
-  });
 });
 
 window.addEventListener('resize', resize);
