@@ -349,7 +349,8 @@
 
   <button id="export-btn">Export Tile as SVG</button>
   <button id="export-grid-btn">Export Tile Grid as SVG</button>
-  <button id="demo-btn">Play Demo</button>
+  <div class="cb" style="margin-top:4px;"><label><input type="checkbox" id="dedup-cuts"> Remove overlapping cut lines (grid)</label></div>
+  <button id="demo-btn" style="margin-top:8px;">Play Demo</button>
 
   <details class="section-wrap examples">
     <summary>Examples</summary>
@@ -1825,6 +1826,70 @@ function drawJunction(p) {
 //  SVG export
 // ============================================================
 
+// Given a list of closed polylines, drop segments that appear in more than one
+// polyline (the shared interlock edges between adjacent tiles), then chain the
+// remaining segments back into continuous polylines so the laser cutter draws
+// each shared line exactly once instead of twice.
+function dedupAndChainSegments(polylines, tol) {
+  const T = tol || 0.001;
+  const keyOf = p => Math.round(p.x / T) + ',' + Math.round(p.y / T);
+  const edgeKey = (a, b) => a < b ? a + '|' + b : b + '|' + a;
+
+  const ptMap = new Map();
+  const adj = new Map();
+  const edges = [];
+  const seenEdges = new Set();
+
+  for (const pts of polylines) {
+    if (pts.length < 2) continue;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length];
+      const ka = keyOf(a), kb = keyOf(b);
+      if (ka === kb) continue;
+      if (!ptMap.has(ka)) ptMap.set(ka, { x: a.x, y: a.y });
+      if (!ptMap.has(kb)) ptMap.set(kb, { x: b.x, y: b.y });
+      const ek = edgeKey(ka, kb);
+      if (seenEdges.has(ek)) continue;
+      seenEdges.add(ek);
+      if (!adj.has(ka)) adj.set(ka, new Set());
+      if (!adj.has(kb)) adj.set(kb, new Set());
+      adj.get(ka).add(kb);
+      adj.get(kb).add(ka);
+      edges.push({ ka, kb, ek });
+    }
+  }
+
+  const used = new Set();
+  // Walk along unused edges from `cur`, never immediately doubling back to `prev`.
+  const walk = (cur, prev) => {
+    const seq = [cur];
+    while (true) {
+      let next = null;
+      for (const n of adj.get(cur)) {
+        if (n === prev) continue;
+        if (!used.has(edgeKey(cur, n))) { next = n; break; }
+      }
+      if (next === null) break;
+      used.add(edgeKey(cur, next));
+      seq.push(next);
+      prev = cur;
+      cur = next;
+    }
+    return seq;
+  };
+
+  const chains = [];
+  for (const { ka, kb, ek } of edges) {
+    if (used.has(ek)) continue;
+    used.add(ek);
+    const fwd = walk(kb, ka);             // [kb, ...]
+    const bwd = walk(ka, kb);             // [ka, ...]
+    const chain = bwd.slice().reverse().concat(fwd);
+    chains.push(chain.map(k => ptMap.get(k)));
+  }
+  return chains;
+}
+
 function downloadSVG(svgString, filename) {
   const blob = new Blob([svgString], { type: 'image/svg+xml' });
   const url = URL.createObjectURL(blob);
@@ -1879,8 +1944,9 @@ document.getElementById('export-grid-btn').addEventListener('click', () => {
   const s = sl / (2 * Math.sin(Math.PI / SHAPE.sides));  // circumradius in mm
   const r = p.radius * sl;
   const cells = SHAPE.grid(Math.round(p.gridR));
+  const dedup = document.getElementById('dedup-cuts').checked;
 
-  const paths = [];
+  const tilePolys = [];
   let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
 
   for (const cell of cells) {
@@ -1896,7 +1962,17 @@ document.getElementById('export-grid-btn').addEventListener('click', () => {
       if (pt.y < yMin) yMin = pt.y;
       if (pt.y > yMax) yMax = pt.y;
     }
-    paths.push(fp.map((pt, i) =>
+    tilePolys.push(fp);
+  }
+
+  let paths;
+  if (dedup) {
+    const chains = dedupAndChainSegments(tilePolys);
+    paths = chains.map(chain => chain.map((pt, i) =>
+      (i === 0 ? 'M' : 'L') + pt.x.toFixed(4) + ' ' + pt.y.toFixed(4)
+    ).join(' '));
+  } else {
+    paths = tilePolys.map(fp => fp.map((pt, i) =>
       (i === 0 ? 'M' : 'L') + pt.x.toFixed(4) + ' ' + pt.y.toFixed(4)
     ).join(' ') + ' Z');
   }
@@ -1916,14 +1992,15 @@ document.getElementById('export-grid-btn').addEventListener('click', () => {
   const sn = SHAPE.name.toLowerCase();
   const jt = p.angular ? 'ang' : 'arc';
   const ss2 = p.sideSmooth > 0.001 ? `-ss${(p.sideSmooth * 100).toFixed(0)}` : '';
-  downloadSVG(svg, `${sn}-grid-${p.angle}deg-r${(p.radius * 100).toFixed(0)}-re${(p.roundEdge * 1000).toFixed(0)}-rv${(p.roundVtx * 1000).toFixed(0)}${ss2}-${p.exportSize}mm-${jt}-${cells.length}tiles.svg`);
+  const dd = dedup ? '-dedup' : '';
+  downloadSVG(svg, `${sn}-grid-${p.angle}deg-r${(p.radius * 100).toFixed(0)}-re${(p.roundEdge * 1000).toFixed(0)}-rv${(p.roundVtx * 1000).toFixed(0)}${ss2}-${p.exportSize}mm-${jt}-${cells.length}tiles${dd}.svg`);
 });
 
 // ============================================================
 //  URL state persistence
 // ============================================================
 
-const CHECKBOXES = ['show-original', 'show-circles', 'show-single', 'show-junction', 'show-stats'];
+const CHECKBOXES = ['show-original', 'show-circles', 'show-single', 'show-junction', 'show-stats', 'dedup-cuts'];
 
 function saveToUrl() {
   const params = new URLSearchParams();
