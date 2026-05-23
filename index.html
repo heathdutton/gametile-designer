@@ -2116,6 +2116,10 @@ sliders.forEach(s => {
       if (isNaN(v)) v = +el.value;  // keep current on bad input
       if (step >= 1) v = Math.round(v);
       else v = Math.round(v / step) * step;
+      // Manual entry overrides slider limits — widen bounds so the
+      // range input doesn't clamp the value back.
+      if (v < +el.min) el.min = v;
+      if (v > +el.max) el.max = v;
       el.value = v;
       valSpan.textContent = s.fmt(+el.value);
       if (s.id === 'tilt') syncPerspVisibility();
