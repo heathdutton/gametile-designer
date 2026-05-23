@@ -2016,10 +2016,20 @@ function loadFromUrl() {
   const hash = location.hash.slice(1);
   if (!hash) return;
   const params = new URLSearchParams(hash);
+  // Apply shape first so the angle slider's native bounds are set before
+  // we widen them below for any saved out-of-range value.
+  if (params.has('sides')) {
+    setShape(+params.get('sides'));
+  }
   sliders.forEach(s => {
     if (params.has(s.id)) {
       const el = document.getElementById(s.id);
-      el.value = params.get(s.id);
+      const v = +params.get(s.id);
+      // Manual entry can save values outside the slider's normal range;
+      // widen bounds so the range input doesn't clamp them on load.
+      if (v < +el.min) el.min = v;
+      if (v > +el.max) el.max = v;
+      el.value = v;
       document.getElementById(s.vid).textContent = s.fmt(+el.value);
     }
   });
@@ -2035,9 +2045,6 @@ function loadFromUrl() {
     const idx = +params.get('scheme');
     document.getElementById('scheme').value = idx;
     setScheme(idx);
-  }
-  if (params.has('sides')) {
-    setShape(+params.get('sides'));
   }
 }
 
