@@ -909,22 +909,41 @@ function smoothSides(pts, pct, cx, cy, angle) {
 //
 //  Pulls a closed polyline inward by a constant perpendicular
 //  distance. NOT a scale-down — each edge is independently
-//  translated by its inward normal, then adjacent offset edges
-//  are joined by miter (with a bevel fallback at sharp concave
-//  corners). A final sweep drops fold-back segments that appear
-//  when the offset eats past a dovetail's half-width.
+//  translated by its inward normal, then each junction is
+//  classified by where the two offset lines actually intersect:
 //
-//  Winding: polyVerts produces vertices in mathematical CCW which,
-//  flipped to screen y-down, traces visually CCW with the interior
-//  on the right of motion. For tangent (dx, dy), inward normal is
+//    miter (t1 ≥ 1, t2 ≤ 0):  convex corner; extend both edges
+//                              to the intersection. Bevel if the
+//                              miter exceeds MITER_LIMIT × offset.
+//    trim  (0 ≤ t1 ≤ 1,
+//           0 ≤ t2 ≤ 1):      offset edges cross each other —
+//                              the feature between them has been
+//                              eaten by the inset. Pull both
+//                              edges' endpoints back to the
+//                              intersection.
+//    bevel (anything else):    concave or degenerate — emit two
+//                              separate offset endpoints.
+//
+//  This handles fold-backs at the source: when the inset exceeds
+//  a feature's half-width (e.g. a dovetail tab or a corner arc),
+//  the offending segments are clipped back to where they cross
+//  instead of producing a tangled polyline that needs post-hoc
+//  cleanup. Collapsed segments (where the inbound and outbound
+//  trims pass each other) drop out naturally.
+//
+//  Winding: polyVerts produces math-CCW vertices; flipped to
+//  screen y-down this traces visually CCW with the interior on
+//  the right of motion. For tangent (dx, dy), inward normal is
 //  (-dy, dx).
 // ============================================================
 
 function insetPolyline(pts, offset) {
   const n = pts.length;
   if (n < 3 || offset <= 1e-6) return pts;
+  const MITER_LIMIT = 4;
+  const MAX_PASSES = 8;
 
-  // Step 1: offset each edge by the inward normal.
+  // Build raw offset segments (immutable per-segment data).
   const segs = new Array(n);
   for (let i = 0; i < n; i++) {
     const P = pts[i];
@@ -936,81 +955,102 @@ function insetPolyline(pts, offset) {
     segs[i] = {
       P: { x: P.x + nx * offset, y: P.y + ny * offset },
       Q: { x: Q.x + nx * offset, y: Q.y + ny * offset },
-      tx: dx / len, ty: dy / len,
+      tMin: 0, tMax: 1,
+      alive: true, bevelOut: false,
     };
   }
 
-  // Step 2: build new corners by intersecting adjacent offset lines.
-  // Miter limit: if the joined vertex sits more than MITER_LIMIT × offset
-  // away from the original endpoint, bevel instead.
-  const MITER_LIMIT = 4;
-  const corners = [];
-  for (let i = 0; i < n; i++) {
-    const sIn = segs[(i - 1 + n) % n];
-    const sOut = segs[i];
-    if (!sIn && !sOut) { corners.push({ x: pts[i].x, y: pts[i].y }); continue; }
-    if (!sIn)  { corners.push(sOut.P); continue; }
-    if (!sOut) { corners.push(sIn.Q);  continue; }
+  // Iterate: classify corners between consecutive ALIVE segments, mark any
+  // newly-collapsed segments dead, and repeat. This lets cascading trims
+  // (where a collapsed segment exposes its neighbours to a new neighbour)
+  // settle correctly. Without iteration, the tab between two trimmed
+  // walls leaves orphaned offset edges that produce Z-fold artifacts.
+  for (let pass = 0; pass < MAX_PASSES; pass++) {
+    // Reset trims/bevels on alive segments — the corner set may have changed.
+    for (const s of segs) if (s && s.alive) { s.tMin = 0; s.tMax = 1; s.bevelOut = false; }
 
-    const x1 = sIn.P.x, y1 = sIn.P.y, x2 = sIn.Q.x, y2 = sIn.Q.y;
-    const x3 = sOut.P.x, y3 = sOut.P.y, x4 = sOut.Q.x, y4 = sOut.Q.y;
-    const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    let anyDied = false;
+    const aliveIdx = [];
+    for (let i = 0; i < n; i++) if (segs[i] && segs[i].alive) aliveIdx.push(i);
+    if (aliveIdx.length < 3) return [];
 
-    if (Math.abs(denom) < 1e-9) {
-      // Parallel offset lines — collinear original edges, just use the midpoint
-      corners.push({ x: (x2 + x3) / 2, y: (y2 + y3) / 2 });
-      continue;
-    }
+    for (let a = 0; a < aliveIdx.length; a++) {
+      const sIn = segs[aliveIdx[a]];
+      const sOut = segs[aliveIdx[(a + 1) % aliveIdx.length]];
 
-    const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
-    const ix = x1 + t * (x2 - x1);
-    const iy = y1 + t * (y2 - y1);
+      const x1 = sIn.P.x, y1 = sIn.P.y, x2 = sIn.Q.x, y2 = sIn.Q.y;
+      const x3 = sOut.P.x, y3 = sOut.P.y, x4 = sOut.Q.x, y4 = sOut.Q.y;
+      const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
 
-    const ex = ix - x2, ey = iy - y2;
-    const miterDist = Math.sqrt(ex * ex + ey * ey);
-    if (miterDist > MITER_LIMIT * offset) {
-      // Bevel: emit both offset endpoints
-      corners.push({ x: x2, y: y2 });
-      corners.push({ x: x3, y: y3 });
-    } else {
-      corners.push({ x: ix, y: iy });
-    }
-  }
+      if (Math.abs(denom) < 1e-9) {
+        // Parallel offset lines. Three sub-cases:
+        //   a) endpoints meet → smooth continuation, no corner needed.
+        //   b) same direction, endpoints don't meet → bevel.
+        //   c) opposite direction → a feature collapsed between these two
+        //      and they form a U-turn. Kill both so the cascade can
+        //      reconnect the outer neighbours.
+        const tInDot = (x2 - x1) * (x4 - x3) + (y2 - y1) * (y4 - y3);
+        if (tInDot < 0) {
+          if (sIn.alive)  { sIn.alive = false;  anyDied = true; }
+          if (sOut.alive) { sOut.alive = false; anyDied = true; }
+          continue;
+        }
+        const gx = x3 - x2, gy = y3 - y2;
+        if (gx * gx + gy * gy > 1e-6) sIn.bevelOut = true;
+        continue;
+      }
 
-  // Step 3: fold-back cleanup. When the offset is large enough to invert a
-  // local feature (e.g. a dovetail tab narrower than 2× offset), neighbouring
-  // corners cross over and the polyline winds backwards. Drop runs of edges
-  // whose direction has flipped relative to their pre-offset tangent.
-  // Multiple passes catch cascading flips.
-  let cur = corners;
-  for (let pass = 0; pass < 3; pass++) {
-    const m = cur.length;
-    if (m < 4) break;
-    const keep = new Array(m).fill(true);
-    let anyDropped = false;
-    for (let i = 0; i < m; i++) {
-      const A = cur[i], B = cur[(i + 1) % m];
-      const odx = B.x - A.x, ody = B.y - A.y;
-      // Find the nearest source segment by checking dot product against the
-      // original segments — when the corner→corner edge direction is opposed
-      // to every nearby original tangent, it's a fold-back.
-      // Cheap heuristic: compare to the original segment whose corner-index
-      // matches (segs[i] runs from pts[i] to pts[i+1], corners[i] is around
-      // pts[i] so the corresponding outgoing original is segs[i]).
-      const src = segs[i % n];
-      if (!src) continue;
-      if (odx * src.tx + ody * src.ty < 0) {
-        keep[i] = false;
-        keep[(i + 1) % m] = false;
-        anyDropped = true;
+      const t1 = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
+      const t2 = ((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / -denom;
+
+      if (t1 >= 1 && t2 <= 0) {
+        // Convex miter.
+        const ix = x1 + t1 * (x2 - x1), iy = y1 + t1 * (y2 - y1);
+        const miterDist = Math.hypot(ix - x2, iy - y2);
+        if (miterDist > MITER_LIMIT * offset) {
+          sIn.bevelOut = true;
+        } else {
+          sIn.tMax = t1;
+          sOut.tMin = t2;
+        }
+      } else if (t1 > 0 && t1 < 1 && t2 > 0 && t2 < 1) {
+        // Fold-back trim.
+        if (t1 < sIn.tMax) sIn.tMax = t1;
+        if (t2 > sOut.tMin) sOut.tMin = t2;
+      } else {
+        // Concave or unusual — bevel.
+        sIn.bevelOut = true;
       }
     }
-    if (!anyDropped) break;
-    cur = cur.filter((_, idx) => keep[idx]);
-    if (cur.length < 3) return [];
+
+    // Collapse-by-trim: segments whose tMin caught up to tMax die too.
+    for (const s of segs) {
+      if (s && s.alive && s.tMin >= s.tMax) {
+        s.alive = false;
+        anyDied = true;
+      }
+    }
+    if (!anyDied) break;
   }
 
-  return cur;
+  // Emit polyline: for each surviving segment, push its trimmed start, plus
+  // its end if a bevel edge needs to connect to the next segment's start.
+  const result = [];
+  for (let i = 0; i < n; i++) {
+    const s = segs[i];
+    if (!s || !s.alive) continue;
+    const sx = s.P.x + s.tMin * (s.Q.x - s.P.x);
+    const sy = s.P.y + s.tMin * (s.Q.y - s.P.y);
+    result.push({ x: sx, y: sy });
+    if (s.bevelOut) {
+      const ex = s.P.x + s.tMax * (s.Q.x - s.P.x);
+      const ey = s.P.y + s.tMax * (s.Q.y - s.P.y);
+      result.push({ x: ex, y: ey });
+    }
+  }
+
+  if (result.length < 3) return [];
+  return result;
 }
 
 // ============================================================
@@ -1410,7 +1450,8 @@ function getP() {
 // ---- Animated parameter interpolation ----
 // Numeric params lerp toward target over ~100ms (exponential ease-out).
 const ANIM_KEYS = ['angle','radius','size','explode','roundEdge','roundVtx',
-  'sideSmooth','thickness','exportSize','tilt','perspective','rotation'];
+  'sideSmooth','thickness','exportSize','tilt','perspective','rotation',
+  'inset1','inset2'];
 let animP = null;   // current animated state
 let animRaf = null;  // pending rAF id
 
@@ -1435,6 +1476,7 @@ function lerpP(cur, tgt) {
   cur.showJunction = tgt.showJunction;
   cur.showStats = tgt.showStats;
   cur.scheme = tgt.scheme;
+  cur.insets = tgt.insets;
   return moving;
 }
 
