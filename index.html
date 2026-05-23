@@ -314,10 +314,14 @@
       <input type="radio" name="inset1-style" id="inset1-bevel" value="bevel"><label for="inset1-bevel">Bevel</label>
     </div>
     <div id="inset1-radii" style="margin-top:6px">
-      <label style="margin-top:6px">Outer R <span id="v-inset1-outer">0.0 mm</span></label>
-      <input type="range" id="inset1-outer" min="0" max="10" step="0.1" value="0">
-      <label style="margin-top:6px">Inner R <span id="v-inset1-inner">0.0 mm</span></label>
-      <input type="range" id="inset1-inner" min="0" max="10" step="0.1" value="0">
+      <div id="inset1-outer-row">
+        <label style="margin-top:6px">Outer R <span id="v-inset1-outer">0.0 mm</span></label>
+        <input type="range" id="inset1-outer" min="0" max="10" step="0.1" value="0">
+      </div>
+      <div id="inset1-inner-row">
+        <label style="margin-top:6px">Inner R <span id="v-inset1-inner">0.0 mm</span></label>
+        <input type="range" id="inset1-inner" min="0" max="10" step="0.1" value="0">
+      </div>
     </div>
   </div>
   <div class="group" id="inset2-group" style="display:none">
@@ -329,10 +333,14 @@
       <input type="radio" name="inset2-style" id="inset2-bevel" value="bevel"><label for="inset2-bevel">Bevel</label>
     </div>
     <div id="inset2-radii" style="margin-top:6px">
-      <label style="margin-top:6px">Outer R <span id="v-inset2-outer">0.0 mm</span></label>
-      <input type="range" id="inset2-outer" min="0" max="10" step="0.1" value="0">
-      <label style="margin-top:6px">Inner R <span id="v-inset2-inner">0.0 mm</span></label>
-      <input type="range" id="inset2-inner" min="0" max="10" step="0.1" value="0">
+      <div id="inset2-outer-row">
+        <label style="margin-top:6px">Outer R <span id="v-inset2-outer">0.0 mm</span></label>
+        <input type="range" id="inset2-outer" min="0" max="10" step="0.1" value="0">
+      </div>
+      <div id="inset2-inner-row">
+        <label style="margin-top:6px">Inner R <span id="v-inset2-inner">0.0 mm</span></label>
+        <input type="range" id="inset2-inner" min="0" max="10" step="0.1" value="0">
+      </div>
     </div>
   </div>
   <div class="gauge-detail" id="hex-dims"></div>
@@ -2520,13 +2528,17 @@ function syncInsetVisibility() {
   const count = +document.querySelector('input[name="insets"]:checked').value;
   insetGroups[1].style.display = count >= 1 ? '' : 'none';
   insetGroups[2].style.display = count >= 2 ? '' : 'none';
-  // Hide outer/inner radii sub-block when style is 'round' (Clipper's Round
-  // join already produces arc corners, so the extra radii would compose
-  // confusingly with that).
+  // Clipper's Round join arcs the inset's concave corners (with radius =
+  // inset distance) but leaves convex corners sharp — those are the
+  // "points" left over. So in round mode, Outer R (which rounds convex
+  // corners) is useful, but Inner R would re-round the already-arc'd
+  // concave chord segments into a jagged mess. Hide Inner R in round mode.
   for (const n of [1, 2]) {
     const style = document.querySelector(`input[name="inset${n}-style"]:checked`).value;
     const radii = document.getElementById(`inset${n}-radii`);
-    if (radii) radii.style.display = (count >= n && style !== 'round') ? '' : 'none';
+    const innerRow = document.getElementById(`inset${n}-inner-row`);
+    if (radii) radii.style.display = count >= n ? '' : 'none';
+    if (innerRow) innerRow.style.display = (count >= n && style !== 'round') ? '' : 'none';
   }
 }
 document.querySelectorAll('input[name="insets"]').forEach(radio =>
