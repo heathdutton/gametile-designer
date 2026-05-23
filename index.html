@@ -313,6 +313,12 @@
       <input type="radio" name="inset1-style" id="inset1-round" value="round"><label for="inset1-round">Round</label>
       <input type="radio" name="inset1-style" id="inset1-bevel" value="bevel"><label for="inset1-bevel">Bevel</label>
     </div>
+    <div id="inset1-radii" style="margin-top:6px">
+      <label style="margin-top:6px">Outer R <span id="v-inset1-outer">0.0 mm</span></label>
+      <input type="range" id="inset1-outer" min="0" max="10" step="0.1" value="0">
+      <label style="margin-top:6px">Inner R <span id="v-inset1-inner">0.0 mm</span></label>
+      <input type="range" id="inset1-inner" min="0" max="10" step="0.1" value="0">
+    </div>
   </div>
   <div class="group" id="inset2-group" style="display:none">
     <label>Inset 2 Distance <span id="v-inset2">4.0 mm</span></label>
@@ -321,6 +327,12 @@
       <input type="radio" name="inset2-style" id="inset2-miter" value="miter" checked><label for="inset2-miter">Miter</label>
       <input type="radio" name="inset2-style" id="inset2-round" value="round"><label for="inset2-round">Round</label>
       <input type="radio" name="inset2-style" id="inset2-bevel" value="bevel"><label for="inset2-bevel">Bevel</label>
+    </div>
+    <div id="inset2-radii" style="margin-top:6px">
+      <label style="margin-top:6px">Outer R <span id="v-inset2-outer">0.0 mm</span></label>
+      <input type="range" id="inset2-outer" min="0" max="10" step="0.1" value="0">
+      <label style="margin-top:6px">Inner R <span id="v-inset2-inner">0.0 mm</span></label>
+      <input type="range" id="inset2-inner" min="0" max="10" step="0.1" value="0">
     </div>
   </div>
   <div class="gauge-detail" id="hex-dims"></div>
@@ -948,7 +960,7 @@ function insetJoinType(style) {
   return JoinType.Miter;
 }
 
-function insetPolyline(pts, offset, style) {
+function insetPolyline(pts, offset, style, outerR, innerR) {
   if (pts.length < 3 || offset <= 1e-6) return pts;
   const { inflatePathsD, EndType, areaPathsD } = globalThis.Clipper2;
   // Negative delta = inward offset. Precision 6 = 1e-6 grid in input units
@@ -966,7 +978,87 @@ function insetPolyline(pts, offset, style) {
     }
   }
   // Clipper points have an extra .z field; strip to match our format.
-  return best.map(p => ({ x: p.x, y: p.y }));
+  const stripped = best.map(p => ({ x: p.x, y: p.y }));
+  // Optional per-corner rounding: outerR rounds convex corners, innerR
+  // rounds concave corners. No-op when both are 0 (the common case for the
+  // round style, where Clipper has already arc-joined the corners).
+  if (outerR > 1e-6 || innerR > 1e-6) {
+    return roundInsetCorners(stripped, outerR || 0, innerR || 0);
+  }
+  return stripped;
+}
+
+// Rounds each corner of a closed polyline by an amount that depends on
+// whether the corner is convex (outerR) or concave (innerR) relative to the
+// polyline's winding. The math mirrors the existing roundCorners() but with
+// a per-corner radius decision instead of the .vtx flag.
+function roundInsetCorners(pts, outerR, innerR) {
+  const n = pts.length;
+  if (n < 3) return pts;
+  if (outerR < 1e-6 && innerR < 1e-6) return pts;
+
+  // Shoelace formula: positive = CCW in math (= CW in screen y-down).
+  let signed = 0;
+  for (let i = 0; i < n; i++) {
+    const A = pts[i], B = pts[(i + 1) % n];
+    signed += A.x * B.y - B.x * A.y;
+  }
+  const ccw = signed > 0;
+
+  const out = [];
+  const ARC_SEGS = 6;
+  for (let i = 0; i < n; i++) {
+    const A = pts[(i - 1 + n) % n];
+    const B = pts[i];
+    const C = pts[(i + 1) % n];
+
+    let dxBA = A.x - B.x, dyBA = A.y - B.y;
+    let dxBC = C.x - B.x, dyBC = C.y - B.y;
+    const lenBA = Math.sqrt(dxBA * dxBA + dyBA * dyBA);
+    const lenBC = Math.sqrt(dxBC * dxBC + dyBC * dyBC);
+    if (lenBA < 1e-6 || lenBC < 1e-6) { out.push(B); continue; }
+    dxBA /= lenBA; dyBA /= lenBA;
+    dxBC /= lenBC; dyBC /= lenBC;
+
+    // Turn direction: cross product of (B→C) and (B→A).
+    // Positive cross with CCW winding → convex corner.
+    const turn = (-dxBA) * dyBC - (-dyBA) * dxBC;
+    const isConvex = ccw ? turn > 0 : turn < 0;
+    const radius = isConvex ? outerR : innerR;
+    if (radius < 1e-6) { out.push(B); continue; }
+
+    const dot = dxBA * dxBC + dyBA * dyBC;
+    const halfAngle = Math.acos(Math.max(-1, Math.min(1, dot))) / 2;
+    if (halfAngle < 0.001 || halfAngle > Math.PI - 0.001) { out.push(B); continue; }
+
+    const tan_ha = Math.tan(halfAngle);
+    let d = radius / tan_ha;
+    const maxD = Math.min(lenBA, lenBC) * 0.45;
+    if (d > maxD) d = maxD;
+    const actualR = d * tan_ha;
+
+    const T1 = { x: B.x + dxBA * d, y: B.y + dyBA * d };
+    const T2 = { x: B.x + dxBC * d, y: B.y + dyBC * d };
+
+    const bisX = dxBA + dxBC, bisY = dyBA + dyBC;
+    const bisLen = Math.sqrt(bisX * bisX + bisY * bisY);
+    if (bisLen < 1e-6) { out.push(B); continue; }
+    const dist = actualR / Math.sin(halfAngle);
+    const cx = B.x + (bisX / bisLen) * dist;
+    const cy = B.y + (bisY / bisLen) * dist;
+
+    const a1 = Math.atan2(T1.y - cy, T1.x - cx);
+    const a2 = Math.atan2(T2.y - cy, T2.x - cx);
+    let sweep = a2 - a1;
+    while (sweep >  Math.PI) sweep -= TAU;
+    while (sweep < -Math.PI) sweep += TAU;
+
+    for (let j = 0; j <= ARC_SEGS; j++) {
+      const a = a1 + sweep * j / ARC_SEGS;
+      out.push({ x: cx + actualR * Math.cos(a), y: cy + actualR * Math.sin(a) });
+    }
+  }
+  return out;
 }
 
 // ============================================================
@@ -1362,6 +1454,10 @@ function getP() {
     inset2:    +document.getElementById('inset2').value,
     inset1Style: document.querySelector('input[name="inset1-style"]:checked').value,
     inset2Style: document.querySelector('input[name="inset2-style"]:checked').value,
+    inset1Outer: +document.getElementById('inset1-outer').value,
+    inset1Inner: +document.getElementById('inset1-inner').value,
+    inset2Outer: +document.getElementById('inset2-outer').value,
+    inset2Inner: +document.getElementById('inset2-inner').value,
   };
 }
 
@@ -1369,7 +1465,7 @@ function getP() {
 // Numeric params lerp toward target over ~100ms (exponential ease-out).
 const ANIM_KEYS = ['angle','radius','size','explode','roundEdge','roundVtx',
   'sideSmooth','thickness','exportSize','tilt','perspective','rotation',
-  'inset1','inset2'];
+  'inset1','inset2','inset1Outer','inset1Inner','inset2Outer','inset2Inner'];
 let animP = null;   // current animated state
 let animRaf = null;  // pending rAF id
 
@@ -1575,8 +1671,8 @@ function drawWithP(p) {
   // Convert inset distances (mm) to canvas pixels.
   const mmToPx = sideLen / p.exportSize;
   const insetSpecs = [];
-  if (p.insets >= 1) insetSpecs.push({ d: p.inset1 * mmToPx, style: p.inset1Style });
-  if (p.insets >= 2) insetSpecs.push({ d: p.inset2 * mmToPx, style: p.inset2Style });
+  if (p.insets >= 1) insetSpecs.push({ d: p.inset1 * mmToPx, style: p.inset1Style, outerR: p.inset1Outer * mmToPx, innerR: p.inset1Inner * mmToPx });
+  if (p.insets >= 2) insetSpecs.push({ d: p.inset2 * mmToPx, style: p.inset2Style, outerR: p.inset2Outer * mmToPx, innerR: p.inset2Inner * mmToPx });
 
   // Build per-cellRot outline+inset templates once at origin, then translate
   // them into each tile's position. Insets are O(n²) for self-intersection
@@ -1596,7 +1692,7 @@ function drawWithP(p) {
     const o = (p.roundEdge > 0 || p.roundVtx > 0)
       ? roundCorners(src, p.roundEdge * sideLen, p.roundVtx * sideLen)
       : src;
-    const ins = insetSpecs.map(spec => insetPolyline(src, spec.d, spec.style)).filter(poly => poly.length >= 3);
+    const ins = insetSpecs.map(spec => insetPolyline(src, spec.d, spec.style, spec.outerR, spec.innerR)).filter(poly => poly.length >= 3);
     t = { outline: o, insets: ins };
     templateCache.set(cellRot, t);
     return t;
@@ -1806,10 +1902,10 @@ function drawSingleTile(p) {
   // Inset layers (cut lines)
   const mmToPxSingle = sl / p.exportSize;
   const insetSpecs = [];
-  if (p.insets >= 1) insetSpecs.push({ d: p.inset1 * mmToPxSingle, style: p.inset1Style });
-  if (p.insets >= 2) insetSpecs.push({ d: p.inset2 * mmToPxSingle, style: p.inset2Style });
+  if (p.insets >= 1) insetSpecs.push({ d: p.inset1 * mmToPxSingle, style: p.inset1Style, outerR: p.inset1Outer * mmToPxSingle, innerR: p.inset1Inner * mmToPxSingle });
+  if (p.insets >= 2) insetSpecs.push({ d: p.inset2 * mmToPxSingle, style: p.inset2Style, outerR: p.inset2Outer * mmToPxSingle, innerR: p.inset2Inner * mmToPxSingle });
   for (const spec of insetSpecs) {
-    const ip = insetPolyline(src, spec.d, spec.style);
+    const ip = insetPolyline(src, spec.d, spec.style, spec.outerR, spec.innerR);
     if (ip.length >= 3) {
       tracePath(ip);
       ctx.strokeStyle = '#e94560';
@@ -2073,11 +2169,11 @@ document.getElementById('export-btn').addEventListener('click', () => {
   // so the corner-style picker actually controls the inset's look.
   const insetPolys = [];
   if (p.insets >= 1) {
-    const ip = insetPolyline(src, p.inset1, p.inset1Style);
+    const ip = insetPolyline(src, p.inset1, p.inset1Style, p.inset1Outer, p.inset1Inner);
     if (ip.length >= 3) insetPolys.push(ip);
   }
   if (p.insets >= 2) {
-    const ip = insetPolyline(src, p.inset2, p.inset2Style);
+    const ip = insetPolyline(src, p.inset2, p.inset2Style, p.inset2Outer, p.inset2Inner);
     if (ip.length >= 3) insetPolys.push(ip);
   }
 
@@ -2140,11 +2236,11 @@ document.getElementById('export-grid-btn').addEventListener('click', () => {
     // unrounded src so the corner-style picker controls the inset's look.
     const tileInsets = [];
     if (p.insets >= 1) {
-      const ip = insetPolyline(src, p.inset1, p.inset1Style);
+      const ip = insetPolyline(src, p.inset1, p.inset1Style, p.inset1Outer, p.inset1Inner);
       if (ip.length >= 3) tileInsets.push(ip);
     }
     if (p.insets >= 2) {
-      const ip = insetPolyline(src, p.inset2, p.inset2Style);
+      const ip = insetPolyline(src, p.inset2, p.inset2Style, p.inset2Outer, p.inset2Inner);
       if (ip.length >= 3) tileInsets.push(ip);
     }
 
@@ -2284,7 +2380,11 @@ const sliders = [
   { id: 'thickness', vid: 'v-thickness', fmt: v => (+v).toFixed(1) + ' mm' },
   { id: 'export-size', vid: 'v-export-size', fmt: v => v + ' mm' },
   { id: 'inset1', vid: 'v-inset1', fmt: v => (+v).toFixed(1) + ' mm' },
+  { id: 'inset1-outer', vid: 'v-inset1-outer', fmt: v => (+v).toFixed(1) + ' mm' },
+  { id: 'inset1-inner', vid: 'v-inset1-inner', fmt: v => (+v).toFixed(1) + ' mm' },
   { id: 'inset2', vid: 'v-inset2', fmt: v => (+v).toFixed(1) + ' mm' },
+  { id: 'inset2-outer', vid: 'v-inset2-outer', fmt: v => (+v).toFixed(1) + ' mm' },
+  { id: 'inset2-inner', vid: 'v-inset2-inner', fmt: v => (+v).toFixed(1) + ' mm' },
   { id: 'size',    vid: 'v-size',    fmt: v => v + '%' },
   { id: 'grid',    vid: 'v-grid',    fmt: v => v },
   { id: 'explode', vid: 'v-explode', fmt: v => v + '%' },
@@ -2319,7 +2419,11 @@ sliders.forEach(s => {
     onInput();
   });
   // Click label text to reset slider to boring/zero value (animated)
-  const label = el.closest('.group').querySelector('label');
+  // Prefer the immediately-preceding label (for sliders nested inside a
+  // group), fall back to the first label in the closest .group.
+  const label = (el.previousElementSibling && el.previousElementSibling.tagName === 'LABEL')
+    ? el.previousElementSibling
+    : el.closest('.group').querySelector('label');
   label.addEventListener('click', e => {
     if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
     if (e.target.closest('.val-input') || e.target.id === s.vid) return;
@@ -2416,6 +2520,14 @@ function syncInsetVisibility() {
   const count = +document.querySelector('input[name="insets"]:checked').value;
   insetGroups[1].style.display = count >= 1 ? '' : 'none';
   insetGroups[2].style.display = count >= 2 ? '' : 'none';
+  // Hide outer/inner radii sub-block when style is 'round' (Clipper's Round
+  // join already produces arc corners, so the extra radii would compose
+  // confusingly with that).
+  for (const n of [1, 2]) {
+    const style = document.querySelector(`input[name="inset${n}-style"]:checked`).value;
+    const radii = document.getElementById(`inset${n}-radii`);
+    if (radii) radii.style.display = (count >= n && style !== 'round') ? '' : 'none';
+  }
 }
 document.querySelectorAll('input[name="insets"]').forEach(radio =>
   radio.addEventListener('change', () => {
@@ -2424,9 +2536,9 @@ document.querySelectorAll('input[name="insets"]').forEach(radio =>
     onInput();
   })
 );
-// Per-inset corner style picker — purely visual, just trigger re-render.
+// Per-inset corner style picker — re-render and toggle radii sub-block.
 document.querySelectorAll('input[name="inset1-style"], input[name="inset2-style"]').forEach(radio =>
-  radio.addEventListener('change', onInput)
+  radio.addEventListener('change', () => { syncInsetVisibility(); onInput(); })
 );
 // Mark inset sliders as user-touched when interacted with.
 ['inset1', 'inset2'].forEach(id => {
