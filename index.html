@@ -1062,10 +1062,10 @@ function insetPolyline(pts, offset) {
 // "spike" sticking out of the polyline. These can survive both the
 // trim cascade and the global self-intersection sweep when two trims
 // nearly-but-don't-quite collide, leaving a thin sliver protrusion.
-// Cutoff: cos(angle between consecutive edge tangents) < -0.5 marks a
-// turn sharper than 120°, which is well past any legitimate corner in
-// our shapes (hex exterior angles are 60°, dovetail tips are sharper
-// but their tangents stay positive-dot).
+// Cutoff: dot product of consecutive edge tangents < 0 means the
+// turn is sharper than 90°. After offsetting, legitimate corners
+// only get smoother, never sharper than the source — so any 90°+
+// turn in the inset is a fold-back artifact.
 function removeSpikes(poly) {
   if (poly.length < 4) return poly;
   // Iterate until stable — removing one spike can expose another.
@@ -1083,7 +1083,7 @@ function removeSpikes(poly) {
       const m1 = Math.hypot(v1x, v1y);
       const m2 = Math.hypot(v2x, v2y);
       if (m1 < 1e-9 || m2 < 1e-9) continue;
-      if ((v1x * v2x + v1y * v2y) / (m1 * m2) < -0.5) continue;
+      if (v1x * v2x + v1y * v2y < 0) continue;
       out.push(B);
     }
     if (out.length === n) return out;
