@@ -297,6 +297,22 @@
     <label>Tile Side Length <span id="v-export-size">30 mm</span></label>
     <input type="range" id="export-size" min="10" max="60" step="1" value="30">
   </div>
+  <div class="group" style="margin-bottom:14px">
+    <label style="margin-bottom:6px">Insets</label>
+    <div class="pill-switch" style="margin-bottom:0">
+      <input type="radio" name="insets" id="insets-0" value="0" checked><label for="insets-0">0</label>
+      <input type="radio" name="insets" id="insets-1" value="1"><label for="insets-1">1</label>
+      <input type="radio" name="insets" id="insets-2" value="2"><label for="insets-2">2</label>
+    </div>
+  </div>
+  <div class="group" id="inset1-group" style="display:none">
+    <label>Inset 1 Distance <span id="v-inset1">2.0 mm</span></label>
+    <input type="range" id="inset1" min="0.1" max="20" step="0.1" value="2">
+  </div>
+  <div class="group" id="inset2-group" style="display:none">
+    <label>Inset 2 Distance <span id="v-inset2">4.0 mm</span></label>
+    <input type="range" id="inset2" min="0.1" max="20" step="0.1" value="4">
+  </div>
   <div class="gauge-detail" id="hex-dims"></div>
   </details>
 
@@ -725,7 +741,7 @@ function roundCorners(pts, edgeRadius, vtxRadius) {
 
   const n = pts.length;
   const out = [];
-  const ARC_SEGS = 6;
+  const ARC_SEGS = 12;
 
   for (let i = 0; i < n; i++) {
     const A = pts[(i - 1 + n) % n];
@@ -886,6 +902,266 @@ function smoothSides(pts, pct, cx, cy, angle) {
     }
   }
   return out;
+}
+
+// ============================================================
+//  Inset (parallel-curve offset)
+//
+//  Pulls a closed polyline inward by a constant perpendicular
+//  distance. NOT a scale-down — each edge is independently
+//  translated by its inward normal, then each junction is
+//  classified by where the two offset lines actually intersect:
+//
+//    miter (t1 ≥ 1, t2 ≤ 0):  convex corner; extend both edges
+//                              to the intersection. Bevel if the
+//                              miter exceeds MITER_LIMIT × offset.
+//    trim  (0 ≤ t1 ≤ 1,
+//           0 ≤ t2 ≤ 1):      offset edges cross each other —
+//                              the feature between them has been
+//                              eaten by the inset. Pull both
+//                              edges' endpoints back to the
+//                              intersection.
+//    bevel (anything else):    concave or degenerate — emit two
+//                              separate offset endpoints.
+//
+//  This handles fold-backs at the source: when the inset exceeds
+//  a feature's half-width (e.g. a dovetail tab or a corner arc),
+//  the offending segments are clipped back to where they cross
+//  instead of producing a tangled polyline that needs post-hoc
+//  cleanup. Collapsed segments (where the inbound and outbound
+//  trims pass each other) drop out naturally.
+//
+//  Winding: polyVerts produces math-CCW vertices; flipped to
+//  screen y-down this traces visually CCW with the interior on
+//  the right of motion. For tangent (dx, dy), inward normal is
+//  (-dy, dx).
+// ============================================================
+
+function insetPolyline(pts, offset) {
+  const n = pts.length;
+  if (n < 3 || offset <= 1e-6) return pts;
+  const MITER_LIMIT = 4;
+  const MAX_PASSES = 8;
+
+  // Build raw offset segments (immutable per-segment data).
+  const segs = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const P = pts[i];
+    const Q = pts[(i + 1) % n];
+    const dx = Q.x - P.x, dy = Q.y - P.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 1e-9) { segs[i] = null; continue; }
+    const nx = -dy / len, ny = dx / len;
+    segs[i] = {
+      P: { x: P.x + nx * offset, y: P.y + ny * offset },
+      Q: { x: Q.x + nx * offset, y: Q.y + ny * offset },
+      tMin: 0, tMax: 1,
+      alive: true, bevelOut: false,
+    };
+  }
+
+  // Iterate: classify corners between consecutive ALIVE segments, mark any
+  // newly-collapsed segments dead, and repeat. This lets cascading trims
+  // (where a collapsed segment exposes its neighbours to a new neighbour)
+  // settle correctly. Without iteration, the tab between two trimmed
+  // walls leaves orphaned offset edges that produce Z-fold artifacts.
+  for (let pass = 0; pass < MAX_PASSES; pass++) {
+    // Reset trims/bevels on alive segments — the corner set may have changed.
+    for (const s of segs) if (s && s.alive) { s.tMin = 0; s.tMax = 1; s.bevelOut = false; }
+
+    let anyDied = false;
+    const aliveIdx = [];
+    for (let i = 0; i < n; i++) if (segs[i] && segs[i].alive) aliveIdx.push(i);
+    if (aliveIdx.length < 3) return [];
+
+    for (let a = 0; a < aliveIdx.length; a++) {
+      const sIn = segs[aliveIdx[a]];
+      const sOut = segs[aliveIdx[(a + 1) % aliveIdx.length]];
+
+      const x1 = sIn.P.x, y1 = sIn.P.y, x2 = sIn.Q.x, y2 = sIn.Q.y;
+      const x3 = sOut.P.x, y3 = sOut.P.y, x4 = sOut.Q.x, y4 = sOut.Q.y;
+      const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+
+      if (Math.abs(denom) < 1e-9) {
+        // Parallel offset lines. Three sub-cases:
+        //   a) endpoints meet → smooth continuation, no corner needed.
+        //   b) same direction, endpoints don't meet → bevel.
+        //   c) opposite direction → a feature collapsed between these two
+        //      and they form a U-turn. Kill both so the cascade can
+        //      reconnect the outer neighbours.
+        const tInDot = (x2 - x1) * (x4 - x3) + (y2 - y1) * (y4 - y3);
+        if (tInDot < 0) {
+          if (sIn.alive)  { sIn.alive = false;  anyDied = true; }
+          if (sOut.alive) { sOut.alive = false; anyDied = true; }
+          continue;
+        }
+        const gx = x3 - x2, gy = y3 - y2;
+        if (gx * gx + gy * gy > 1e-6) sIn.bevelOut = true;
+        continue;
+      }
+
+      const t1 = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
+      const t2 = ((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / -denom;
+
+      if (t1 >= 1 && t2 <= 0) {
+        // Convex miter.
+        const ix = x1 + t1 * (x2 - x1), iy = y1 + t1 * (y2 - y1);
+        const miterDist = Math.hypot(ix - x2, iy - y2);
+        if (miterDist > MITER_LIMIT * offset) {
+          sIn.bevelOut = true;
+        } else {
+          sIn.tMax = t1;
+          sOut.tMin = t2;
+        }
+      } else if (t1 > 0 && t1 < 1 && t2 > 0 && t2 < 1) {
+        // Fold-back trim.
+        if (t1 < sIn.tMax) sIn.tMax = t1;
+        if (t2 > sOut.tMin) sOut.tMin = t2;
+      } else {
+        // Concave or unusual — bevel.
+        sIn.bevelOut = true;
+      }
+    }
+
+    // Collapse-by-trim: segments whose tMin caught up to tMax die too.
+    for (const s of segs) {
+      if (s && s.alive && s.tMin >= s.tMax) {
+        s.alive = false;
+        anyDied = true;
+      }
+    }
+    if (!anyDied) break;
+  }
+
+  // Emit polyline: for each surviving segment, push its trimmed start, plus
+  // its end if a bevel edge needs to connect to the next segment's start.
+  const result = [];
+  for (let i = 0; i < n; i++) {
+    const s = segs[i];
+    if (!s || !s.alive) continue;
+    const sx = s.P.x + s.tMin * (s.Q.x - s.P.x);
+    const sy = s.P.y + s.tMin * (s.Q.y - s.P.y);
+    result.push({ x: sx, y: sy });
+    if (s.bevelOut) {
+      const ex = s.P.x + s.tMax * (s.Q.x - s.P.x);
+      const ey = s.P.y + s.tMax * (s.Q.y - s.P.y);
+      result.push({ x: ex, y: ey });
+    }
+  }
+
+  if (result.length < 3) return [];
+  // Pass the source centroid so the cleanup can identify the genuine
+  // inset (which always wraps the centroid) vs artifact loops.
+  let cx = 0, cy = 0;
+  for (const p of pts) { cx += p.x; cy += p.y; }
+  cx /= pts.length; cy /= pts.length;
+  return removeSpikes(removeSelfIntersections(result, { x: cx, y: cy }));
+}
+
+// Drop vertices where adjacent edges fold back near-antiparallel — a
+// "spike" sticking out of the polyline. These can survive both the
+// trim cascade and the global self-intersection sweep when two trims
+// nearly-but-don't-quite collide, leaving a thin sliver protrusion.
+// Cutoff: dot product of consecutive edge tangents < 0 means the
+// turn is sharper than 90°. After offsetting, legitimate corners
+// only get smoother, never sharper than the source — so any 90°+
+// turn in the inset is a fold-back artifact.
+function removeSpikes(poly) {
+  if (poly.length < 4) return poly;
+  // Iterate to convergence — removing one spike can expose another.
+  // Hard cap on iterations as a safety against oscillation.
+  let cur = poly;
+  for (let pass = 0; pass < 16; pass++) {
+    const n = cur.length;
+    if (n < 4) break;
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const A = cur[(i - 1 + n) % n];
+      const B = cur[i];
+      const C = cur[(i + 1) % n];
+      const v1x = B.x - A.x, v1y = B.y - A.y;
+      const v2x = C.x - B.x, v2y = C.y - B.y;
+      const m1 = Math.hypot(v1x, v1y);
+      const m2 = Math.hypot(v2x, v2y);
+      if (m1 < 1e-9 || m2 < 1e-9) continue;
+      if (v1x * v2x + v1y * v2y < 0) continue;
+      out.push(B);
+    }
+    if (out.length === n) return out;
+    cur = out;
+  }
+  return cur.length >= 3 ? cur : poly;
+}
+
+// Strip artifact loops from a closed polyline. After the local trim
+// cascade, extreme insets can still produce non-adjacent edge crossings
+// (e.g. when two collapsed features end up overlapping). At each crossing
+// the polyline splits into two closed loops; the genuine inset is the
+// one that contains the source shape's centroid. (Earlier we used
+// larger-area, but at deep insets the artifact can exceed the genuine
+// inset in area — centroid containment is the topologically right test.)
+function removeSelfIntersections(poly, centroid) {
+  let cur = poly;
+  for (let iter = 0; iter < 24; iter++) {
+    const n = cur.length;
+    if (n < 4) return cur;
+    let hit = null;
+    outer: for (let i = 0; i < n; i++) {
+      const A = cur[i], B = cur[(i + 1) % n];
+      for (let j = i + 2; j < n; j++) {
+        if (i === 0 && j === n - 1) continue;
+        const C = cur[j], D = cur[(j + 1) % n];
+        const x1 = A.x, y1 = A.y, x2 = B.x, y2 = B.y;
+        const x3 = C.x, y3 = C.y, x4 = D.x, y4 = D.y;
+        const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+        if (Math.abs(denom) < 1e-9) continue;
+        const t1 = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
+        const t2 = ((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / -denom;
+        if (t1 > 1e-6 && t1 < 1 - 1e-6 && t2 > 1e-6 && t2 < 1 - 1e-6) {
+          hit = { i, j, ix: x1 + t1 * (x2 - x1), iy: y1 + t1 * (y2 - y1) };
+          break outer;
+        }
+      }
+    }
+    if (!hit) return cur;
+
+    const I = { x: hit.ix, y: hit.iy };
+    const outerLoop = [];
+    for (let k = 0; k <= hit.i; k++) outerLoop.push(cur[k]);
+    outerLoop.push(I);
+    for (let k = hit.j + 1; k < n; k++) outerLoop.push(cur[k]);
+    const innerLoop = [I];
+    for (let k = hit.i + 1; k <= hit.j; k++) innerLoop.push(cur[k]);
+
+    const outerContains = pointInPoly(centroid, outerLoop);
+    const innerContains = pointInPoly(centroid, innerLoop);
+    if (outerContains && !innerContains) cur = outerLoop;
+    else if (innerContains && !outerContains) cur = innerLoop;
+    else cur = (polyArea(outerLoop) >= polyArea(innerLoop)) ? outerLoop : innerLoop;
+  }
+  return cur;
+}
+
+function pointInPoly(p, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i].x, yi = poly[i].y;
+    const xj = poly[j].x, yj = poly[j].y;
+    if (((yi > p.y) !== (yj > p.y)) &&
+        (p.x < (xj - xi) * (p.y - yi) / (yj - yi) + xi)) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function polyArea(p) {
+  let a = 0;
+  for (let i = 0; i < p.length; i++) {
+    const A = p[i], B = p[(i + 1) % p.length];
+    a += A.x * B.y - B.x * A.y;
+  }
+  return Math.abs(a) * 0.5;
 }
 
 // ============================================================
@@ -1276,13 +1552,17 @@ function getP() {
     showStats:   document.getElementById('show-stats').checked,
     scheme:    +document.getElementById('scheme').value,
     exportSize:+document.getElementById('export-size').value,
+    insets:    +document.querySelector('input[name="insets"]:checked').value,
+    inset1:    +document.getElementById('inset1').value,
+    inset2:    +document.getElementById('inset2').value,
   };
 }
 
 // ---- Animated parameter interpolation ----
 // Numeric params lerp toward target over ~100ms (exponential ease-out).
 const ANIM_KEYS = ['angle','radius','size','explode','roundEdge','roundVtx',
-  'sideSmooth','thickness','exportSize','tilt','perspective','rotation'];
+  'sideSmooth','thickness','exportSize','tilt','perspective','rotation',
+  'inset1','inset2'];
 let animP = null;   // current animated state
 let animRaf = null;  // pending rAF id
 
@@ -1307,6 +1587,7 @@ function lerpP(cur, tgt) {
   cur.showJunction = tgt.showJunction;
   cur.showStats = tgt.showStats;
   cur.scheme = tgt.scheme;
+  cur.insets = tgt.insets;
   return moving;
 }
 
@@ -1482,23 +1763,56 @@ function drawWithP(p) {
     }
   }
 
+  // Convert inset distances (mm) to canvas pixels.
+  const mmToPx = sideLen / p.exportSize;
+  const insetDistsPx = [];
+  if (p.insets >= 1) insetDistsPx.push(p.inset1 * mmToPx);
+  if (p.insets >= 2) insetDistsPx.push(p.inset2 * mmToPx);
+
+  // Build per-cellRot outline+inset templates once at origin, then translate
+  // them into each tile's position. Insets are O(n²) for self-intersection
+  // cleanup, and every tile of the same orientation produces the same shape
+  // — no point recomputing N times per frame. cellRot varies only for
+  // triangles (up vs down); hex/square always returns 0.
+  const templateCache = new Map();
+  const getTemplate = (cellRot) => {
+    let t = templateCache.get(cellRot);
+    if (t) return t;
+    let o = tileOutline(0, 0, s, r, p.angle, p.angular, SHAPE.sides, cellRot);
+    o = smoothSides(o, p.sideSmooth, 0, 0, p.angle);
+    if (p.roundEdge > 0 || p.roundVtx > 0) o = roundCorners(o, p.roundEdge * sideLen, p.roundVtx * sideLen);
+    const ins = insetDistsPx.map(d => insetPolyline(o, d)).filter(poly => poly.length >= 3);
+    t = { outline: o, insets: ins };
+    templateCache.set(cellRot, t);
+    return t;
+  };
+
+  const cosRotT = Math.cos(rotRad), sinRotT = Math.sin(rotRad);
   const tileData = allCells.map(cell => {
     const { x: px, y: py } = SHAPE.cell2px(cell, s);
     const rawCx = ox + px * (1 + p.explode);
     const rawCy = oy + py * (1 + p.explode);
     const { x: cx, y: cy } = rotPt(rawCx, rawCy);
-    const rot = SHAPE.cellRot(cell) + rotRad;
-    let outline = tileOutline(cx, cy, s, r, p.angle, p.angular, SHAPE.sides, rot);
-    outline = smoothSides(outline, p.sideSmooth, cx, cy, p.angle);
-    if (p.roundEdge > 0 || p.roundVtx > 0) outline = roundCorners(outline, p.roundEdge * sideLen, p.roundVtx * sideLen);
+    const cellRot = SHAPE.cellRot(cell);
+    const tpl = getTemplate(cellRot);
+    // Translate template points into the tile's position. When the table
+    // is rotated, also rotate each point about (cx, cy).
+    const xform = rotRad === 0
+      ? (pt) => ({ x: pt.x + cx, y: pt.y + cy })
+      : (pt) => ({ x: cx + pt.x * cosRotT - pt.y * sinRotT, y: cy + pt.x * sinRotT + pt.y * cosRotT });
+    const outline = tpl.outline.map(xform);
+    const insets = tpl.insets.map(poly => poly.map(xform));
     const cellFade = getCellOpacity(cell);
     const shapeFade = shapeFading ? Math.min(1, fadeElapsed / SHAPE_FADE_DUR) : 1;
-    return { cell, cx, cy, outline, ci: SHAPE.cellColor(cell), rot, fade: cellFade * shapeFade };
+    return { cell, cx, cy, outline, insets, ci: SHAPE.cellColor(cell), rot: cellRot + rotRad, fade: cellFade * shapeFade };
   });
   if (tilt > 0) tileData.sort((a, b) => a.cy - b.cy);
 
-  // Pre-project all tile outlines
-  for (const td of tileData) td.top = td.outline.map(proj);
+  // Pre-project all tile outlines (and insets)
+  for (const td of tileData) {
+    td.top = td.outline.map(proj);
+    td.insetsProj = td.insets.map(poly => poly.map(proj));
+  }
 
   // ---- Shadow pass: soft drop shadow beneath tiles ----
   ctx.save();
@@ -1563,6 +1877,14 @@ function drawWithP(p) {
     ctx.strokeStyle = THEME.stroke;
     ctx.lineWidth = 1.4;
     ctx.stroke();
+
+    // Inset layers (same stroke style — these are real cut lines)
+    for (const inset of td.insetsProj) {
+      tracePath(inset);
+      ctx.strokeStyle = THEME.stroke;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+    }
 
     // Optional: original polygon outline
     if (p.showOrig) {
@@ -1663,6 +1985,21 @@ function drawSingleTile(p) {
   ctx.strokeStyle = '#e94560';
   ctx.lineWidth = 1.8;
   ctx.stroke();
+
+  // Inset layers (cut lines)
+  const mmToPxSingle = sl / p.exportSize;
+  const insetDists = [];
+  if (p.insets >= 1) insetDists.push(p.inset1 * mmToPxSingle);
+  if (p.insets >= 2) insetDists.push(p.inset2 * mmToPxSingle);
+  for (const d of insetDists) {
+    const ip = insetPolyline(outline, d);
+    if (ip.length >= 3) {
+      tracePath(ip);
+      ctx.strokeStyle = '#e94560';
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+    }
+  }
 
   // Dot the tab / notch jogs for clarity
   if (Math.abs(p.angle) > 0.5) {
@@ -1911,30 +2248,48 @@ document.getElementById('export-btn').addEventListener('click', () => {
   pts = smoothSides(pts, p.sideSmooth, 0, 0, p.angle);
   if (p.roundEdge > 0 || p.roundVtx > 0) pts = roundCorners(pts, p.roundEdge * sl, p.roundVtx * sl);
 
+  // Build inset polylines (in mm space, before Y-flip)
+  const insetPolys = [];
+  if (p.insets >= 1) {
+    const ip = insetPolyline(pts, p.inset1);
+    if (ip.length >= 3) insetPolys.push(ip);
+  }
+  if (p.insets >= 2) {
+    const ip = insetPolyline(pts, p.inset2);
+    if (ip.length >= 3) insetPolys.push(ip);
+  }
+
   // Flip Y so SVG matches standard orientation
   const fp = pts.map(pt => ({ x: pt.x, y: -pt.y }));
+  const fpInsets = insetPolys.map(poly => poly.map(pt => ({ x: pt.x, y: -pt.y })));
 
-  const xs = fp.map(pt => pt.x);
-  const ys = fp.map(pt => pt.y);
+  const allPts = fp.concat(...fpInsets);
+  const xs = allPts.map(pt => pt.x);
+  const ys = allPts.map(pt => pt.y);
   const mx = Math.min(...xs) - 1, my = Math.min(...ys) - 1;
   const Mx = Math.max(...xs) + 1, My = Math.max(...ys) + 1;
 
-  const d = fp.map((pt, i) =>
+  const polyToD = (poly, closed) => poly.map((pt, i) =>
     (i === 0 ? 'M' : 'L') + pt.x.toFixed(4) + ' ' + pt.y.toFixed(4)
-  ).join(' ') + ' Z';
+  ).join(' ') + (closed ? ' Z' : '');
+
+  const paths = [polyToD(fp, true), ...fpInsets.map(poly => polyToD(poly, true))];
 
   const svg =
 `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg"
      viewBox="${mx} ${my} ${Mx - mx} ${My - my}"
      width="${(Mx - mx).toFixed(2)}mm" height="${(My - my).toFixed(2)}mm">
-  <path d="${d}" fill="none" stroke="black" stroke-width="0.1"/>
+  ${paths.map(d => `<path d="${d}" fill="none" stroke="black" stroke-width="0.1"/>`).join('\n  ')}
 </svg>`;
 
   const sn = SHAPE.name.toLowerCase();
   const jt = p.angular ? 'ang' : 'arc';
   const ss1 = p.sideSmooth > 0.001 ? `-ss${(p.sideSmooth * 100).toFixed(0)}` : '';
-  downloadSVG(svg, `${sn}-${p.angle}deg-r${(p.radius * 100).toFixed(0)}-re${(p.roundEdge * 1000).toFixed(0)}-rv${(p.roundVtx * 1000).toFixed(0)}${ss1}-${p.exportSize}mm-${jt}.svg`);
+  const ins = p.insets === 0 ? '' :
+              p.insets === 1 ? `-i1-${p.inset1.toFixed(1)}` :
+              `-i2-${p.inset1.toFixed(1)}-${p.inset2.toFixed(1)}`;
+  downloadSVG(svg, `${sn}-${p.angle}deg-r${(p.radius * 100).toFixed(0)}-re${(p.roundEdge * 1000).toFixed(0)}-rv${(p.roundVtx * 1000).toFixed(0)}${ss1}-${p.exportSize}mm-${jt}${ins}.svg`);
 });
 
 // Grid SVG export — all tiles in the current grid
@@ -1947,6 +2302,7 @@ document.getElementById('export-grid-btn').addEventListener('click', () => {
   const dedup = document.getElementById('dedup-cuts').checked;
 
   const tilePolys = [];
+  const insetPolysAll = [];  // flat list of inset polylines (per tile, per layer)
   let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
 
   for (const cell of cells) {
@@ -1955,6 +2311,18 @@ document.getElementById('export-grid-btn').addEventListener('click', () => {
     let pts = tileOutline(px, py, s, r, p.angle, p.angular, SHAPE.sides, rot);
     pts = smoothSides(pts, p.sideSmooth, px, py, p.angle);
     if (p.roundEdge > 0 || p.roundVtx > 0) pts = roundCorners(pts, p.roundEdge * sl, p.roundVtx * sl);
+
+    // Inset layers (per tile, in mm space, before Y-flip)
+    const tileInsets = [];
+    if (p.insets >= 1) {
+      const ip = insetPolyline(pts, p.inset1);
+      if (ip.length >= 3) tileInsets.push(ip);
+    }
+    if (p.insets >= 2) {
+      const ip = insetPolyline(pts, p.inset2);
+      if (ip.length >= 3) tileInsets.push(ip);
+    }
+
     const fp = pts.map(pt => ({ x: pt.x, y: -pt.y }));
     for (const pt of fp) {
       if (pt.x < xMin) xMin = pt.x;
@@ -1963,6 +2331,9 @@ document.getElementById('export-grid-btn').addEventListener('click', () => {
       if (pt.y > yMax) yMax = pt.y;
     }
     tilePolys.push(fp);
+    for (const inset of tileInsets) {
+      insetPolysAll.push(inset.map(pt => ({ x: pt.x, y: -pt.y })));
+    }
   }
 
   let paths;
@@ -1973,6 +2344,12 @@ document.getElementById('export-grid-btn').addEventListener('click', () => {
     ).join(' '));
   } else {
     paths = tilePolys.map(fp => fp.map((pt, i) =>
+      (i === 0 ? 'M' : 'L') + pt.x.toFixed(4) + ' ' + pt.y.toFixed(4)
+    ).join(' ') + ' Z');
+  }
+  // Inset paths are always per-tile (not deduped — they aren't shared)
+  for (const inset of insetPolysAll) {
+    paths.push(inset.map((pt, i) =>
       (i === 0 ? 'M' : 'L') + pt.x.toFixed(4) + ' ' + pt.y.toFixed(4)
     ).join(' ') + ' Z');
   }
@@ -1993,7 +2370,10 @@ document.getElementById('export-grid-btn').addEventListener('click', () => {
   const jt = p.angular ? 'ang' : 'arc';
   const ss2 = p.sideSmooth > 0.001 ? `-ss${(p.sideSmooth * 100).toFixed(0)}` : '';
   const dd = dedup ? '-dedup' : '';
-  downloadSVG(svg, `${sn}-grid-${p.angle}deg-r${(p.radius * 100).toFixed(0)}-re${(p.roundEdge * 1000).toFixed(0)}-rv${(p.roundVtx * 1000).toFixed(0)}${ss2}-${p.exportSize}mm-${jt}-${cells.length}tiles${dd}.svg`);
+  const ins = p.insets === 0 ? '' :
+              p.insets === 1 ? `-i1-${p.inset1.toFixed(1)}` :
+              `-i2-${p.inset1.toFixed(1)}-${p.inset2.toFixed(1)}`;
+  downloadSVG(svg, `${sn}-grid-${p.angle}deg-r${(p.radius * 100).toFixed(0)}-re${(p.roundEdge * 1000).toFixed(0)}-rv${(p.roundVtx * 1000).toFixed(0)}${ss2}-${p.exportSize}mm-${jt}-${cells.length}tiles${dd}${ins}.svg`);
 });
 
 // ============================================================
@@ -2009,6 +2389,7 @@ function saveToUrl() {
   params.set('angular', document.getElementById('joint-angular').checked ? '1' : '0');
   params.set('scheme', document.getElementById('scheme').value);
   params.set('sides', SHAPE.sides);
+  params.set('insets', document.querySelector('input[name="insets"]:checked').value);
   history.replaceState(null, '', '#' + params.toString());
 }
 
@@ -2046,6 +2427,14 @@ function loadFromUrl() {
     document.getElementById('scheme').value = idx;
     setScheme(idx);
   }
+  if (params.has('insets')) {
+    const c = params.get('insets');
+    const r = document.getElementById('insets-' + c);
+    if (r) r.checked = true;
+    // Saved-in-URL inset distances are user-set by definition.
+    if (params.has('inset1')) insetUserTouched.inset1 = true;
+    if (params.has('inset2')) insetUserTouched.inset2 = true;
+  }
 }
 
 // ============================================================
@@ -2060,6 +2449,8 @@ const sliders = [
   { id: 'side-smooth', vid: 'v-side-smooth', fmt: v => v + '%' },
   { id: 'thickness', vid: 'v-thickness', fmt: v => (+v).toFixed(1) + ' mm' },
   { id: 'export-size', vid: 'v-export-size', fmt: v => v + ' mm' },
+  { id: 'inset1', vid: 'v-inset1', fmt: v => (+v).toFixed(1) + ' mm' },
+  { id: 'inset2', vid: 'v-inset2', fmt: v => (+v).toFixed(1) + ' mm' },
   { id: 'size',    vid: 'v-size',    fmt: v => v + '%' },
   { id: 'grid',    vid: 'v-grid',    fmt: v => v },
   { id: 'explode', vid: 'v-explode', fmt: v => v + '%' },
@@ -2081,6 +2472,7 @@ const sliderDefaults = {};
 const sliderBoring = {
   'angle': '0', 'radius': '0', 'round-edge': '0', 'round-vtx': '0',
   'side-smooth': '0', 'thickness': '2', 'export-size': '30',
+  'inset1': '2', 'inset2': '4',
   'size': '85', 'grid': '3', 'explode': '0',
   'tilt': '0', 'perspective': '45', 'rotation': '0',
 };
@@ -2155,6 +2547,60 @@ document.querySelectorAll('input[name="sides"]').forEach(radio =>
 document.querySelectorAll('input[name="joint"]').forEach(radio =>
   radio.addEventListener('change', onInput)
 );
+
+// Insets: pill switch shows/hides the per-inset distance sliders.
+// Smart defaults populate inset distances based on the current shape's
+// apothem (half edge-to-center distance), but only when the user hasn't
+// manually touched that slider.
+const insetGroups = {
+  1: document.getElementById('inset1-group'),
+  2: document.getElementById('inset2-group'),
+};
+const insetUserTouched = { inset1: false, inset2: false };
+function safeInsetMax() {
+  // Apothem of the current shape at the current side length, scaled by
+  // pixel size (matches drawWithP's `sideLen` derivation). We use the
+  // export-size (mm) so the slider value units match the slider's mm.
+  const sl = +document.getElementById('export-size').value;
+  return sl * Math.cos(Math.PI / SHAPE.sides) * 0.5;  // half-apothem
+}
+function applyInsetDefaults() {
+  const count = +document.querySelector('input[name="insets"]:checked').value;
+  const max = safeInsetMax();
+  if (count >= 1 && !insetUserTouched.inset1) {
+    const v = count === 1 ? max * 0.5 : max * 0.33;
+    document.getElementById('inset1').value = v.toFixed(1);
+    document.getElementById('v-inset1').textContent = v.toFixed(1) + ' mm';
+  }
+  if (count >= 2 && !insetUserTouched.inset2) {
+    const v = max * 0.66;
+    document.getElementById('inset2').value = v.toFixed(1);
+    document.getElementById('v-inset2').textContent = v.toFixed(1) + ' mm';
+  }
+}
+function syncInsetVisibility() {
+  const count = +document.querySelector('input[name="insets"]:checked').value;
+  insetGroups[1].style.display = count >= 1 ? '' : 'none';
+  insetGroups[2].style.display = count >= 2 ? '' : 'none';
+}
+document.querySelectorAll('input[name="insets"]').forEach(radio =>
+  radio.addEventListener('change', () => {
+    syncInsetVisibility();
+    applyInsetDefaults();
+    onInput();
+  })
+);
+// Mark inset sliders as user-touched when interacted with.
+['inset1', 'inset2'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    insetUserTouched[id] = true;
+  });
+});
+// Recompute defaults when shape changes (only for untouched sliders).
+document.querySelectorAll('input[name="sides"]').forEach(radio =>
+  radio.addEventListener('change', applyInsetDefaults)
+);
+document.getElementById('export-size').addEventListener('input', applyInsetDefaults);
 document.getElementById('randomize-btn').addEventListener('click', () => {
   const rng = (min, max, step) => {
     const steps = Math.round((max - min) / step);
@@ -2366,6 +2812,8 @@ document.getElementById('close-stats-btn').addEventListener('click', () => {
 setScheme(0);
 loadFromUrl();
 syncPerspVisibility();
+syncInsetVisibility();
+applyInsetDefaults();
 // Prevent Randomize buttons inside <summary> from toggling the <details>
 document.querySelectorAll('.section-wrap summary button').forEach(btn => {
   btn.addEventListener('click', e => e.preventDefault());
@@ -2379,7 +2827,7 @@ document.getElementById('sidebar-toggle').addEventListener('click', () => {
 });
 
 window.addEventListener('resize', resize);
-window.addEventListener('hashchange', () => { loadFromUrl(); syncPerspVisibility(); onInput(); });
+window.addEventListener('hashchange', () => { loadFromUrl(); syncPerspVisibility(); syncInsetVisibility(); onInput(); });
 resize();
 </script>
 </body>
