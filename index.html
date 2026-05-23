@@ -1055,7 +1055,41 @@ function insetPolyline(pts, offset) {
   let cx = 0, cy = 0;
   for (const p of pts) { cx += p.x; cy += p.y; }
   cx /= pts.length; cy /= pts.length;
-  return removeSelfIntersections(result, { x: cx, y: cy });
+  return removeSpikes(removeSelfIntersections(result, { x: cx, y: cy }));
+}
+
+// Drop vertices where adjacent edges fold back near-antiparallel — a
+// "spike" sticking out of the polyline. These can survive both the
+// trim cascade and the global self-intersection sweep when two trims
+// nearly-but-don't-quite collide, leaving a thin sliver protrusion.
+// Cutoff: cos(angle between consecutive edge tangents) < -0.5 marks a
+// turn sharper than 120°, which is well past any legitimate corner in
+// our shapes (hex exterior angles are 60°, dovetail tips are sharper
+// but their tangents stay positive-dot).
+function removeSpikes(poly) {
+  if (poly.length < 4) return poly;
+  // Iterate until stable — removing one spike can expose another.
+  let cur = poly;
+  for (let pass = 0; pass < 4; pass++) {
+    const n = cur.length;
+    if (n < 4) break;
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const A = cur[(i - 1 + n) % n];
+      const B = cur[i];
+      const C = cur[(i + 1) % n];
+      const v1x = B.x - A.x, v1y = B.y - A.y;
+      const v2x = C.x - B.x, v2y = C.y - B.y;
+      const m1 = Math.hypot(v1x, v1y);
+      const m2 = Math.hypot(v2x, v2y);
+      if (m1 < 1e-9 || m2 < 1e-9) continue;
+      if ((v1x * v2x + v1y * v2y) / (m1 * m2) < -0.5) continue;
+      out.push(B);
+    }
+    if (out.length === n) return out;
+    cur = out;
+  }
+  return cur.length >= 3 ? cur : poly;
 }
 
 // Strip artifact loops from a closed polyline. After the local trim
