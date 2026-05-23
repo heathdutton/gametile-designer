@@ -1587,10 +1587,16 @@ function drawWithP(p) {
   const getTemplate = (cellRot) => {
     let t = templateCache.get(cellRot);
     if (t) return t;
-    let o = tileOutline(0, 0, s, r, p.angle, p.angular, SHAPE.sides, cellRot);
-    o = smoothSides(o, p.sideSmooth, 0, 0, p.angle);
-    if (p.roundEdge > 0 || p.roundVtx > 0) o = roundCorners(o, p.roundEdge * sideLen, p.roundVtx * sideLen);
-    const ins = insetSpecs.map(spec => insetPolyline(o, spec.d, spec.style)).filter(poly => poly.length >= 3);
+    // Build twice: 'src' has dovetails + S-curves but NO corner rounding.
+    // 'o' is the fully-finished outer outline. Insets run on src so the
+    // corner-style picker actually controls the inset's look — if we offset
+    // the already-rounded outer, every style ends up visually overly-round.
+    let src = tileOutline(0, 0, s, r, p.angle, p.angular, SHAPE.sides, cellRot);
+    src = smoothSides(src, p.sideSmooth, 0, 0, p.angle);
+    const o = (p.roundEdge > 0 || p.roundVtx > 0)
+      ? roundCorners(src, p.roundEdge * sideLen, p.roundVtx * sideLen)
+      : src;
+    const ins = insetSpecs.map(spec => insetPolyline(src, spec.d, spec.style)).filter(poly => poly.length >= 3);
     t = { outline: o, insets: ins };
     templateCache.set(cellRot, t);
     return t;
@@ -1783,10 +1789,12 @@ function drawSingleTile(p) {
     ctx.stroke();
   });
 
-  // Modified outline
-  let outline = tileOutline(cx, cy, s, r, p.angle, p.angular, SHAPE.sides);
-  outline = smoothSides(outline, p.sideSmooth, cx, cy, p.angle);
-  if (p.roundEdge > 0 || p.roundVtx > 0) outline = roundCorners(outline, p.roundEdge * sl, p.roundVtx * sl);
+  // Modified outline. 'src' is the unrounded version used as the inset source.
+  let src = tileOutline(cx, cy, s, r, p.angle, p.angular, SHAPE.sides);
+  src = smoothSides(src, p.sideSmooth, cx, cy, p.angle);
+  const outline = (p.roundEdge > 0 || p.roundVtx > 0)
+    ? roundCorners(src, p.roundEdge * sl, p.roundVtx * sl)
+    : src;
   tracePath(outline);
   ctx.fillStyle = 'rgba(233,69,96,0.2)';
   ctx.fill();
@@ -1801,7 +1809,7 @@ function drawSingleTile(p) {
   if (p.insets >= 1) insetSpecs.push({ d: p.inset1 * mmToPxSingle, style: p.inset1Style });
   if (p.insets >= 2) insetSpecs.push({ d: p.inset2 * mmToPxSingle, style: p.inset2Style });
   for (const spec of insetSpecs) {
-    const ip = insetPolyline(outline, spec.d, spec.style);
+    const ip = insetPolyline(src, spec.d, spec.style);
     if (ip.length >= 3) {
       tracePath(ip);
       ctx.strokeStyle = '#e94560';
@@ -2053,18 +2061,23 @@ document.getElementById('export-btn').addEventListener('click', () => {
   const sl = p.exportSize;               // mm side length from input
   const s = sl / (2 * Math.sin(Math.PI / SHAPE.sides));  // circumradius in mm
   const r = p.radius * sl;
-  let pts = tileOutline(0, 0, s, r, p.angle, p.angular, SHAPE.sides);
-  pts = smoothSides(pts, p.sideSmooth, 0, 0, p.angle);
-  if (p.roundEdge > 0 || p.roundVtx > 0) pts = roundCorners(pts, p.roundEdge * sl, p.roundVtx * sl);
+  // 'src' is the unrounded source the insets work from; 'pts' is the
+  // fully-rounded outer outline that gets exported.
+  let src = tileOutline(0, 0, s, r, p.angle, p.angular, SHAPE.sides);
+  src = smoothSides(src, p.sideSmooth, 0, 0, p.angle);
+  const pts = (p.roundEdge > 0 || p.roundVtx > 0)
+    ? roundCorners(src, p.roundEdge * sl, p.roundVtx * sl)
+    : src;
 
-  // Build inset polylines (in mm space, before Y-flip)
+  // Build inset polylines (in mm space, before Y-flip) from the unrounded src
+  // so the corner-style picker actually controls the inset's look.
   const insetPolys = [];
   if (p.insets >= 1) {
-    const ip = insetPolyline(pts, p.inset1, p.inset1Style);
+    const ip = insetPolyline(src, p.inset1, p.inset1Style);
     if (ip.length >= 3) insetPolys.push(ip);
   }
   if (p.insets >= 2) {
-    const ip = insetPolyline(pts, p.inset2, p.inset2Style);
+    const ip = insetPolyline(src, p.inset2, p.inset2Style);
     if (ip.length >= 3) insetPolys.push(ip);
   }
 
@@ -2117,18 +2130,21 @@ document.getElementById('export-grid-btn').addEventListener('click', () => {
   for (const cell of cells) {
     const { x: px, y: py } = SHAPE.cell2px(cell, s);
     const rot = SHAPE.cellRot(cell);
-    let pts = tileOutline(px, py, s, r, p.angle, p.angular, SHAPE.sides, rot);
-    pts = smoothSides(pts, p.sideSmooth, px, py, p.angle);
-    if (p.roundEdge > 0 || p.roundVtx > 0) pts = roundCorners(pts, p.roundEdge * sl, p.roundVtx * sl);
+    let src = tileOutline(px, py, s, r, p.angle, p.angular, SHAPE.sides, rot);
+    src = smoothSides(src, p.sideSmooth, px, py, p.angle);
+    const pts = (p.roundEdge > 0 || p.roundVtx > 0)
+      ? roundCorners(src, p.roundEdge * sl, p.roundVtx * sl)
+      : src;
 
-    // Inset layers (per tile, in mm space, before Y-flip)
+    // Inset layers (per tile, in mm space, before Y-flip) — offset from the
+    // unrounded src so the corner-style picker controls the inset's look.
     const tileInsets = [];
     if (p.insets >= 1) {
-      const ip = insetPolyline(pts, p.inset1, p.inset1Style);
+      const ip = insetPolyline(src, p.inset1, p.inset1Style);
       if (ip.length >= 3) tileInsets.push(ip);
     }
     if (p.insets >= 2) {
-      const ip = insetPolyline(pts, p.inset2, p.inset2Style);
+      const ip = insetPolyline(src, p.inset2, p.inset2Style);
       if (ip.length >= 3) tileInsets.push(ip);
     }
 
