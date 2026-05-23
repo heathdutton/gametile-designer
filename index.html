@@ -970,103 +970,54 @@ function insetJoinType(style) {
 
 function insetPolyline(pts, offset, style, outerR, innerR) {
   if (pts.length < 3 || offset <= 1e-6) return pts;
-  const { inflatePathsD, EndType, areaPathsD } = globalThis.Clipper2;
-  // Negative delta = inward offset. Precision 6 = 1e-6 grid in input units
-  // (more than enough for sub-mm laser-cut work).
-  const result = inflatePathsD([pts], -offset, insetJoinType(style), EndType.Polygon, 4, 6);
-  if (!result || !result.length) return [];
-  // If the inset split the shape (e.g. a tab pinches off into a
-  // separate piece) keep the path with the largest absolute area.
-  let best = result[0];
-  if (result.length > 1) {
-    let bestArea = Math.abs(areaPathsD([best]));
-    for (let i = 1; i < result.length; i++) {
-      const a = Math.abs(areaPathsD([result[i]]));
-      if (a > bestArea) { best = result[i]; bestArea = a; }
+  const { inflatePathsD, JoinType, EndType, areaPathsD } = globalThis.Clipper2;
+  const joinT = insetJoinType(style);
+
+  // Helper: run inflatePathsD on a single path and return the largest-area
+  // result path (or null on degenerate output).
+  const inflate = (path, delta, jt) => {
+    const r = inflatePathsD([path], delta, jt, EndType.Polygon, 4, 6);
+    if (!r || r.length === 0) return null;
+    let best = r[0];
+    if (r.length > 1) {
+      let bestArea = Math.abs(areaPathsD([best]));
+      for (let i = 1; i < r.length; i++) {
+        const a = Math.abs(areaPathsD([r[i]]));
+        if (a > bestArea) { best = r[i]; bestArea = a; }
+      }
     }
+    return best.map(p => ({ x: p.x, y: p.y }));
+  };
+
+  // Outer R rounds the inset's convex (outward-facing) corners. Achieve it
+  // via morphological opening: inset by (offset + outerR) with the chosen
+  // style, then outset by outerR with Round. Net depth stays at `offset`,
+  // but every convex turn that survives the erosion gets a Round-join arc
+  // of radius outerR on the dilation pass. This handles the case where the
+  // chosen style is itself Round (arcs already break long edges into many
+  // tiny chord-segments) — Clipper sees the dilation step's geometry
+  // globally rather than corner-by-corner.
+  let result;
+  if (outerR > 1e-6) {
+    const eroded = inflate(pts, -(offset + outerR), joinT);
+    if (!eroded) return [];
+    result = inflate(eroded, outerR, JoinType.Round);
+  } else {
+    result = inflate(pts, -offset, joinT);
   }
-  // Clipper points have an extra .z field; strip to match our format.
-  const stripped = best.map(p => ({ x: p.x, y: p.y }));
-  // Optional per-corner rounding: outerR rounds convex corners, innerR
-  // rounds concave corners. No-op when both are 0 (the common case for the
-  // round style, where Clipper has already arc-joined the corners).
-  if (outerR > 1e-6 || innerR > 1e-6) {
-    return roundInsetCorners(stripped, outerR || 0, innerR || 0);
+  if (!result) return [];
+
+  // Inner R rounds the inset's concave (inward-facing) corners. Achieve it
+  // via morphological closing: outset by innerR with Round, then inset by
+  // innerR with the chosen style. Skipped in round mode since Clipper
+  // already arcs the concave corners there.
+  if (innerR > 1e-6 && style !== 'round') {
+    const dilated = inflate(result, innerR, JoinType.Round);
+    if (!dilated) return result;
+    const closed = inflate(dilated, -innerR, joinT);
+    if (closed) result = closed;
   }
-  return stripped;
-}
-
-// Rounds each corner of a closed polyline by an amount that depends on
-// whether the corner is convex (outerR) or concave (innerR) relative to the
-// polyline's winding. The math mirrors the existing roundCorners() but with
-// a per-corner radius decision instead of the .vtx flag.
-function roundInsetCorners(pts, outerR, innerR) {
-  const n = pts.length;
-  if (n < 3) return pts;
-  if (outerR < 1e-6 && innerR < 1e-6) return pts;
-
-  // Shoelace formula: positive = CCW in math (= CW in screen y-down).
-  let signed = 0;
-  for (let i = 0; i < n; i++) {
-    const A = pts[i], B = pts[(i + 1) % n];
-    signed += A.x * B.y - B.x * A.y;
-  }
-  const ccw = signed > 0;
-
-  const out = [];
-  const ARC_SEGS = 6;
-  for (let i = 0; i < n; i++) {
-    const A = pts[(i - 1 + n) % n];
-    const B = pts[i];
-    const C = pts[(i + 1) % n];
-
-    let dxBA = A.x - B.x, dyBA = A.y - B.y;
-    let dxBC = C.x - B.x, dyBC = C.y - B.y;
-    const lenBA = Math.sqrt(dxBA * dxBA + dyBA * dyBA);
-    const lenBC = Math.sqrt(dxBC * dxBC + dyBC * dyBC);
-    if (lenBA < 1e-6 || lenBC < 1e-6) { out.push(B); continue; }
-    dxBA /= lenBA; dyBA /= lenBA;
-    dxBC /= lenBC; dyBC /= lenBC;
-
-    // Turn direction: cross product of (B→C) and (B→A).
-    // Positive cross with CCW winding → convex corner.
-    const turn = (-dxBA) * dyBC - (-dyBA) * dxBC;
-    const isConvex = ccw ? turn > 0 : turn < 0;
-    const radius = isConvex ? outerR : innerR;
-    if (radius < 1e-6) { out.push(B); continue; }
-
-    const dot = dxBA * dxBC + dyBA * dyBC;
-    const halfAngle = Math.acos(Math.max(-1, Math.min(1, dot))) / 2;
-    if (halfAngle < 0.001 || halfAngle > Math.PI - 0.001) { out.push(B); continue; }
-
-    const tan_ha = Math.tan(halfAngle);
-    let d = radius / tan_ha;
-    const maxD = Math.min(lenBA, lenBC) * 0.45;
-    if (d > maxD) d = maxD;
-    const actualR = d * tan_ha;
-
-    const T1 = { x: B.x + dxBA * d, y: B.y + dyBA * d };
-    const T2 = { x: B.x + dxBC * d, y: B.y + dyBC * d };
-
-    const bisX = dxBA + dxBC, bisY = dyBA + dyBC;
-    const bisLen = Math.sqrt(bisX * bisX + bisY * bisY);
-    if (bisLen < 1e-6) { out.push(B); continue; }
-    const dist = actualR / Math.sin(halfAngle);
-    const cx = B.x + (bisX / bisLen) * dist;
-    const cy = B.y + (bisY / bisLen) * dist;
-
-    const a1 = Math.atan2(T1.y - cy, T1.x - cx);
-    const a2 = Math.atan2(T2.y - cy, T2.x - cx);
-    let sweep = a2 - a1;
-    while (sweep >  Math.PI) sweep -= TAU;
-    while (sweep < -Math.PI) sweep += TAU;
-
-    for (let j = 0; j <= ARC_SEGS; j++) {
-      const a = a1 + sweep * j / ARC_SEGS;
-      out.push({ x: cx + actualR * Math.cos(a), y: cy + actualR * Math.sin(a) });
-    }
-  }
-  return out;
+  return result;
 }
 
 // ============================================================
