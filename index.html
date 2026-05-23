@@ -308,10 +308,20 @@
   <div class="group" id="inset1-group" style="display:none">
     <label>Inset 1 Distance <span id="v-inset1">2.0 mm</span></label>
     <input type="range" id="inset1" min="0.1" max="20" step="0.1" value="2">
+    <div class="pill-switch" style="margin-top:6px;margin-bottom:0">
+      <input type="radio" name="inset1-style" id="inset1-miter" value="miter" checked><label for="inset1-miter">Miter</label>
+      <input type="radio" name="inset1-style" id="inset1-round" value="round"><label for="inset1-round">Round</label>
+      <input type="radio" name="inset1-style" id="inset1-bevel" value="bevel"><label for="inset1-bevel">Bevel</label>
+    </div>
   </div>
   <div class="group" id="inset2-group" style="display:none">
     <label>Inset 2 Distance <span id="v-inset2">4.0 mm</span></label>
     <input type="range" id="inset2" min="0.1" max="20" step="0.1" value="4">
+    <div class="pill-switch" style="margin-top:6px;margin-bottom:0">
+      <input type="radio" name="inset2-style" id="inset2-miter" value="miter" checked><label for="inset2-miter">Miter</label>
+      <input type="radio" name="inset2-style" id="inset2-round" value="round"><label for="inset2-round">Round</label>
+      <input type="radio" name="inset2-style" id="inset2-bevel" value="bevel"><label for="inset2-bevel">Bevel</label>
+    </div>
   </div>
   <div class="gauge-detail" id="hex-dims"></div>
   </details>
@@ -930,12 +940,20 @@ function smoothSides(pts, pct, cx, cy, angle) {
 `}function Dn(e,t=2){let n=``;for(let r of e)n+=En(r,t);return n}function On(e,t,n){let r=[];for(let i of e)r.push({x:i.x+t,y:i.y+n});return r}function kn(e,t){return{x:Math.round(e.x*t),y:Math.round(e.y*t)}}function An(e,t){return{x:e.x*t,y:e.y*t}}function jn(e,t){let n=L.maxSafeCoordinateForScale(t);return L.checkSafeScaleValue(e.left,n,`scaleRect`),L.checkSafeScaleValue(e.top,n,`scaleRect`),L.checkSafeScaleValue(e.right,n,`scaleRect`),L.checkSafeScaleValue(e.bottom,n,`scaleRect`),{left:Math.round(e.left*t),top:Math.round(e.top*t),right:Math.round(e.right*t),bottom:Math.round(e.bottom*t)}}function Mn(e,t){if(L.isAlmostZero(t-1))return e;let n=[];for(let r of e)n.push({x:Math.round(r.x*t),y:Math.round(r.y*t)});return n}function Nn(e,t){if(L.isAlmostZero(t-1))return e;let n=[];for(let r of e)n.push(Mn(r,t));return n}function Pn(e,t){if(L.isAlmostZero(t-1))return e;let n=[];for(let r of e)n.push(de.scale(r,t));return n}function Fn(e,t){if(L.isAlmostZero(t-1))return e;let n=[];for(let r of e)n.push(Pn(r,t));return n}function In(e,t){let n=L.maxSafeCoordinateForScale(t),r=[];for(let i of e)L.checkSafeScaleValue(i.x,n,`scalePath64`),L.checkSafeScaleValue(i.y,n,`scalePath64`),r.push({x:Math.round(i.x*t),y:Math.round(i.y*t)});return r}function Ln(e,t){let n=[];for(let r of e)n.push(In(r,t));return n}function Rn(e,t){let n=[];for(let r of e)n.push({x:r.x*t,y:r.y*t});return n}function zn(e,t){let n=[];for(let r of e)n.push(Rn(r,t));return n}function Bn(e){let t=[];for(let n of e)t.push(R.fromPointD(n));return t}function Vn(e){let t=[];for(let n of e)t.push(Bn(n));return t}function Hn(e){let t=[];for(let n of e)t.push(Un(n));return t}function Un(e){let t=[];for(let n of e)t.push(de.fromPoint64(n));return t}function Wn(e,t,n){let r=[];for(let i of e)r.push({x:i.x+t,y:i.y+n});return r}function Gn(e,t,n){let r=[];for(let i of e)r.push(On(i,t,n));return r}function Kn(e,t,n){let r=[];for(let i of e)r.push({x:i.x+t,y:i.y+n});return r}function qn(e,t,n){let r=[];for(let i of e)r.push(Kn(i,t,n));return r}function Jn(e){return[...e].reverse()}function Yn(e){return[...e].reverse()}function Xn(e){let t=[];for(let n of e)t.push(Jn(n));return t}function Zn(e){let t=[];for(let n of e)t.push(Yn(n));return t}function Qn(e){return L.getBounds(e)}function $n(e){let t=z.createInvalid();for(let n of e)for(let e of n)e.x<t.left&&(t.left=e.x),e.x>t.right&&(t.right=e.x),e.y<t.top&&(t.top=e.y),e.y>t.bottom&&(t.bottom=e.y);return t.left===2**53-1?{left:0,top:0,right:0,bottom:0}:t}function er(e){let t=fe.createInvalid();for(let n of e)n.x<t.left&&(t.left=n.x),n.x>t.right&&(t.right=n.x),n.y<t.top&&(t.top=n.y),n.y>t.bottom&&(t.bottom=n.y);return Math.abs(t.left-Number.MAX_VALUE)<L.floatingPointTolerance?{left:0,top:0,right:0,bottom:0}:t}function tr(e){let t=fe.createInvalid();for(let n of e)for(let e of n)e.x<t.left&&(t.left=e.x),e.x>t.right&&(t.right=e.x),e.y<t.top&&(t.top=e.y),e.y>t.bottom&&(t.bottom=e.y);return Math.abs(t.left-Number.MAX_VALUE)<L.floatingPointTolerance?{left:0,top:0,right:0,bottom:0}:t}function nr(e){let t=Math.floor(e.length/2),n=[];for(let r=0;r<t;r++)n.push({x:e[r*2],y:e[r*2+1],z:0});return n}function rr(e){let t=Math.floor(e.length/2),n=[];for(let r=0;r<t;r++)n.push({x:e[r*2],y:e[r*2+1],z:0});return n}function ir(e){return e*e}function ar(e,t){let n=e.x-t.x,r=e.y-t.y;if(Number.isSafeInteger(n)&&Number.isSafeInteger(r)){let e=Math.abs(n),t=Math.abs(r),i=L.maxCoordForSafeAreaProduct*2;if(e<=i&&t<=i){let e=n*n+r*r;if(e<=2**53-1)return e}let a=BigInt(n)*BigInt(n),o=BigInt(r)*BigInt(r);return Number(a+o)}return ir(n)+ir(r)}function or(e,t){return Number.isSafeInteger(e.x)&&Number.isSafeInteger(t.x)&&Number.isSafeInteger(e.y)&&Number.isSafeInteger(t.y)&&(Math.abs(e.x)+Math.abs(t.x)>2**53-1||Math.abs(e.y)+Math.abs(t.y)>2**53-1)?{x:Number((BigInt(e.x)+BigInt(t.x))/Jt),y:Number((BigInt(e.y)+BigInt(t.y))/Jt)}:{x:Math.round((e.x+t.x)/2),y:Math.round((e.y+t.y)/2)}}function sr(e,t){return{x:(e.x+t.x)/2,y:(e.y+t.y)/2}}function cr(e,t,n){e.left-=t,e.right+=t,e.top-=n,e.bottom+=n}function lr(e,t,n){e.left-=t,e.right+=t,e.top-=n,e.bottom+=n}function ur(e,t,n){return ir(e.x-t.x)+ir(e.y-t.y)<n}function dr(e,t,n){let r=e.length,i=[];if(r===0)return i;let a=e[0];i.push(a);for(let n=1;n<r;n++)ur(a,e[n],t)||(a=e[n],i.push(a));return n&&ur(a,i[0],t)&&i.pop(),i}function fr(e,t){let n=e.length,r=[];if(n===0)return r;let i=e[0];r.push(i);for(let t=1;t<n;t++)R.equals(i,e[t])||(i=e[t],r.push(i));return t&&R.equals(i,r[0])&&r.pop(),r}function pr(e,t){e.poly&&e.poly.length>0&&t.push(e.poly);for(let n=0;n<e.count;n++)pr(e.child(n),t)}function mr(e){let t=[];for(let n=0;n<e.count;n++)pr(e.child(n),t);return t}function hr(e,t){e.poly&&e.poly.length>0&&t.push(e.poly);for(let n=0;n<e.count;n++)hr(e.child(n),t)}function gr(e){let t=[];for(let n=0;n<e.count;n++)hr(e.child(n),t);return t}function _r(e,t,n){let r=e.x-t.x,i=e.y-t.y,a=n.x-t.x,o=n.y-t.y;return a===0&&o===0?0:ir(r*o-a*i)/(a*a+o*o)}function vr(e,t,n){let r=e.x-t.x,i=e.y-t.y,a=n.x-t.x,o=n.y-t.y;if(a===0&&o===0)return 0;if(Number.isSafeInteger(r)&&Number.isSafeInteger(i)&&Number.isSafeInteger(a)&&Number.isSafeInteger(o)){let e=BigInt(r)*BigInt(o)-BigInt(a)*BigInt(i),t=e*e,n=BigInt(a)*BigInt(a)+BigInt(o)*BigInt(o);return Number(t)/Number(n)}return ir(L.crossProduct(t,e,n))/(a*a+o*o)}function yr(e,t,n,r,i){for(;;){let a=0,o=0;for(;n>t&&R.equals(e[t],e[n]);)i[n--]=!1;for(let r=t+1;r<n;++r){let i=vr(e[r],e[t],e[n]);i<=o||(o=i,a=r)}if(o<=r)return;if(i[a]=!0,a>t+1&&yr(e,t,a,r,i),a<n-1){t=a;continue}break}}function br(e,t){let n=e.length;if(n<5)return e;let r=Array(n).fill(!1);r[0]=!0,r[n-1]=!0,yr(e,0,n-1,ir(t),r);let i=[];for(let t=0;t<n;++t)r[t]&&i.push(e[t]);return i}function xr(e,t){let n=[];for(let r of e)n.push(br(r,t));return n}function Sr(e,t,n,r,i){for(;;){let a=0,o=0;for(;n>t&&de.equals(e[t],e[n]);)i[n--]=!1;for(let r=t+1;r<n;++r){let i=_r(e[r],e[t],e[n]);i<=o||(o=i,a=r)}if(o<=r)return;if(i[a]=!0,a>t+1&&Sr(e,t,a,r,i),a<n-1){t=a;continue}break}}function Cr(e,t){let n=e.length;if(n<5)return e;let r=Array(n).fill(!1);r[0]=!0,r[n-1]=!0,Sr(e,0,n-1,ir(t),r);let i=[];for(let t=0;t<n;++t)r[t]&&i.push(e[t]);return i}function wr(e,t){let n=[];for(let r of e)n.push(Cr(r,t));return n}function Tr(e,t,n){for(++e;e<=t&&n[e];)++e;if(e<=t)return e;for(e=0;n[e];)++e;return e}function Er(e,t,n){for(e===0?e=t:--e;e>0&&n[e];)--e;if(!n[e])return e;for(e=t;n[e];)--e;return e}function Dr(e,t,n=!0){let r=e.length,i=r-1,a=ir(t);if(r<4)return e;let o=Array(r).fill(!1),s=Array(r).fill(0),c=0;n?(s[0]=vr(e[0],e[i],e[1]),s[i]=vr(e[i],e[0],e[i-1])):(s[0]=Number.MAX_VALUE,s[i]=Number.MAX_VALUE);for(let t=1;t<i;++t)s[t]=vr(e[t],e[t-1],e[t+1]);for(;;){if(s[c]>a){let e=c;do c=Tr(c,i,o);while(c!==e&&s[c]>a);if(c===e)break}let t=Er(c,i,o),r=Tr(c,i,o);if(r===t)break;let l;if(s[r]<s[c]){l=t;let a=c;c=r;let u=Tr(r,i,o);o[c]=!0,c=u;let d=Tr(u,i,o);(n||c!==i&&c!==0)&&(s[c]=vr(e[c],e[a],e[d])),(n||a!==0&&a!==i)&&(s[a]=vr(e[a],e[l],e[c]))}else{l=Er(t,i,o),o[c]=!0,c=r;let a=Tr(r,i,o);(n||c!==i&&c!==0)&&(s[c]=vr(e[c],e[t],e[a])),(n||t!==0&&t!==i)&&(s[t]=vr(e[t],e[l],e[c]))}}let l=[];for(let t=0;t<r;t++)o[t]||l.push(e[t]);return l}function Or(e,t,n=!0){let r=[];for(let i of e)r.push(Dr(i,t,n));return r}function kr(e,t,n=!0){let r=e.length,i=r-1,a=ir(t);if(r<4)return e;let o=Array(r).fill(!1),s=Array(r).fill(0),c=0;n?(s[0]=_r(e[0],e[i],e[1]),s[i]=_r(e[i],e[0],e[i-1])):(s[0]=Number.MAX_VALUE,s[i]=Number.MAX_VALUE);for(let t=1;t<i;++t)s[t]=_r(e[t],e[t-1],e[t+1]);for(;;){if(s[c]>a){let e=c;do c=Tr(c,i,o);while(c!==e&&s[c]>a);if(c===e)break}let t=Er(c,i,o),r=Tr(c,i,o);if(r===t)break;let l;if(s[r]<s[c]){l=t;let a=c;c=r;let u=Tr(r,i,o);o[c]=!0,c=u;let d=Tr(u,i,o);(n||c!==i&&c!==0)&&(s[c]=_r(e[c],e[a],e[d])),(n||a!==0&&a!==i)&&(s[a]=_r(e[a],e[l],e[c]))}else{l=Er(t,i,o),o[c]=!0,c=r;let a=Tr(r,i,o);(n||c!==i&&c!==0)&&(s[c]=_r(e[c],e[t],e[a])),(n||t!==0&&t!==i)&&(s[t]=_r(e[t],e[l],e[c]))}}let l=[];for(let t=0;t<r;t++)o[t]||l.push(e[t]);return l}function Ar(e,t,n=!0){let r=[];for(let i of e)r.push(kr(i,t,n));return r}function jr(e,t=!1){let n=e.length,r=0;if(!t){for(;r<n-1&&L.isCollinear(e[n-1],e[r],e[r+1]);)r++;for(;r<n-1&&L.isCollinear(e[n-2],e[n-1],e[r]);)n--}if(n-r<3)return!t||n<2||R.equals(e[0],e[1])?[]:e;let i=[],a=e[r];for(i.push(a),r++;r<n-1;r++)L.isCollinear(a,e[r],e[r+1])||(a=e[r],i.push(a));if(t)i.push(e[n-1]);else if(!L.isCollinear(a,e[n-1],i[0]))i.push(e[n-1]);else{for(;i.length>2&&L.isCollinear(i[i.length-1],i[i.length-2],i[0]);)i.pop();i.length<3&&(i.length=0)}return i}function Mr(e,t,n=!1){L.checkPrecision(t);let r=10**t,i=In(e,r);return i=jr(i,n),Rn(i,1/r)}function Nr(e,t){return L.pointInPolygon(e,t)}function Pr(e,t,n=2){L.checkPrecision(n);let r=10**n,i=L.maxSafeCoordinateForScale(r);L.checkSafeScaleValue(e.x,i,`pointInPolygonD`),L.checkSafeScaleValue(e.y,i,`pointInPolygonD`);let a=R.fromPointD(de.scale(e,r)),o=In(t,r);return L.pointInPolygon(a,o)}function Fr(e,t,n=0,r=0){if(t<=0)return[];n<=0&&(n=t),r<=2&&(r=Math.ceil(Math.PI*Math.sqrt((t+n)/2)));let i=Math.sin(2*Math.PI/r),a=Math.cos(2*Math.PI/r),o=a,s=i,c=[{x:Math.round(e.x+t),y:e.y}];for(let l=1;l<r;++l){c.push({x:Math.round(e.x+t*o),y:Math.round(e.y+n*s)});let r=o*a-s*i;s=s*a+o*i,o=r}return c}function Ir(e,t,n=0,r=0){if(t<=0)return[];n<=0&&(n=t),r<=2&&(r=Math.ceil(Math.PI*Math.sqrt((t+n)/2)));let i=Math.sin(2*Math.PI/r),a=Math.cos(2*Math.PI/r),o=a,s=i,c=[{x:e.x+t,y:e.y}];for(let l=1;l<r;++l){c.push({x:e.x+t*o,y:e.y+n*s});let r=o*a-s*i;s=s*a+o*i,o=r}return c}function Lr(e,t=!0){return new Kt(t).execute(e)}function Rr(e,t,n=!0){let r;r=t<=0?1:t>8?10**8:10**t;let i=Ln(e,r),{result:a,solution:o}=new Kt(n).execute(i),s;return s=a===Bt.success?Fn(o,1/r):[],{result:a,solution:s}}const zr={invalidRect64:Yt,invalidRectD:Xt,intersect:Zt,intersectD:Qt,union:$t,unionD:en,difference:tn,differenceD:nn,xor:rn,xorD:an,booleanOp:on,booleanOpWithPolyTree:sn,booleanOpD:cn,booleanOpDWithPolyTree:ln,inflatePaths:un,inflatePathsD:dn,rectClip:fn,rectClipLines:pn,minkowskiSum:mn,minkowskiSumD:hn,minkowskiDiff:gn,minkowskiDiffD:_n,area:vn,areaPaths:yn,areaD:bn,areaPathsD:xn,isPositive:Sn,isPositiveD:Cn,path64ToString:wn,paths64ToString:Tn,pathDToString:En,pathsDToString:Dn,offsetPath:On,scalePoint64:kn,scalePointD:An,scaleRect:jn,scalePath:Mn,scalePaths:Nn,scalePathD:Pn,scalePathsD:Fn,scalePath64:In,scalePaths64:Ln,scalePathDFromInt:Rn,scalePathsDFromInt:zn,path64FromD:Bn,paths64FromD:Vn,pathsD:Hn,pathD:Un,translatePath:Wn,translatePaths:Gn,translatePathD:Kn,translatePathsD:qn,reversePath:Jn,reversePathD:Yn,reversePaths:Xn,reversePathsD:Zn,getBounds:Qn,getBoundsPaths:$n,getBoundsD:er,getBoundsPathsD:tr,makePath:nr,makePathD:rr,sqr:ir,distanceSqr:ar,midPoint:or,midPointD:sr,inflateRect:cr,inflateRectD:lr,pointsNearEqual:ur,stripNearDuplicates:dr,stripDuplicates:fr,polyTreeToPaths64:mr,addPolyNodeToPathsD:hr,polyTreeToPathsD:gr,perpendicDistFromLineSqrd:_r,perpendicDistFromLineSqrd64:vr,ramerDouglasPeucker:br,ramerDouglasPeuckerPaths:xr,ramerDouglasPeuckerD:Cr,ramerDouglasPeuckerPathsD:wr,simplifyPath:Dr,simplifyPaths:Or,simplifyPathD:kr,simplifyPathsD:Ar,trimCollinear:jr,trimCollinearD:Mr,pointInPolygon:Nr,pointInPolygonD:Pr,ellipse:Fr,ellipseD:Ir,triangulate:Lr,triangulateD:Rr};globalThis.Clipper2={Active:Ne,ClipType:n,Clipper:qt,Clipper64:He,ClipperBase:Ve,ClipperD:Ue,ClipperEngine:Pe,ClipperOffset:qe,Delaunay:Kt,EndType:V,FillRule:i,HorzJoin:Ae,HorzPosition:De,HorzSegment:ke,InternalClipper:L,InvalidRect64:he,InvalidRectD:ge,JoinType:Ge,JoinWith:Ee,LocalMinima:Se,Minkowski:rt,OutPt:Te,OutPt2:Je,OutRec:Oe,PathType:r,PathUtils:pe,PathsUtils:me,Point64Utils:R,PointDUtils:de,PointInPolygonResult:a,PolyPath64:Le,PolyPathBase:Ie,PolyPathD:Re,PolyTree64:ze,PolyTreeD:Be,Rect64Utils:z,RectClip64:Ye,RectClipLines64:Xe,RectDUtils:fe,ReuseableDataContainer64:Fe,TriangulateResult:Bt,Vertex:xe,VertexFlags:B,area:vn,areaD:bn,areaPaths:yn,areaPathsD:xn,booleanOp:on,booleanOpD:cn,booleanOpDWithPolyTree:ln,booleanOpWithPolyTree:sn,createIntersectNode:we,createLocalMinima:Ce,difference:tn,differenceD:nn,ellipse:Fr,ellipseD:Ir,getBounds:Qn,getBoundsD:er,getBoundsPaths:$n,getBoundsPathsD:tr,inflatePaths:un,inflatePathsD:dn,intersect:Zt,intersectD:Qt,isPositive:Sn,isPositiveD:Cn,makePath:nr,makePathD:rr,minkowskiDiff:gn,minkowskiDiffD:_n,minkowskiSum:mn,minkowskiSumD:hn,pointInPolygon:Nr,pointInPolygonD:Pr,polyTreeToPaths64:mr,polyTreeToPathsD:gr,ramerDouglasPeucker:br,ramerDouglasPeuckerD:Cr,ramerDouglasPeuckerPaths:xr,ramerDouglasPeuckerPathsD:wr,rectClip:fn,rectClipLines:pn,reversePath:Jn,reversePathD:Yn,reversePaths:Xn,reversePathsD:Zn,scalePath64:In,scalePathD:Pn,scalePaths64:Ln,scalePathsD:Fn,simplifyPath:Dr,simplifyPathD:kr,simplifyPaths:Or,simplifyPathsD:Ar,stripDuplicates:fr,translatePath:Wn,translatePathD:Kn,translatePaths:Gn,translatePathsD:qn,triangulate:Lr,triangulateD:Rr,trimCollinear:jr,trimCollinearD:Mr,union:$t,unionD:en,xor:rn,xorD:an};})();
 // ---- END vendored Clipper2 ----
 
-function insetPolyline(pts, offset) {
+// Map our style string to a Clipper2 JoinType. Defaults to miter.
+function insetJoinType(style) {
+  const { JoinType } = globalThis.Clipper2;
+  if (style === 'round') return JoinType.Round;
+  if (style === 'bevel') return JoinType.Bevel;
+  return JoinType.Miter;
+}
+
+function insetPolyline(pts, offset, style) {
   if (pts.length < 3 || offset <= 1e-6) return pts;
-  const { inflatePathsD, JoinType, EndType, areaPathsD } = globalThis.Clipper2;
+  const { inflatePathsD, EndType, areaPathsD } = globalThis.Clipper2;
   // Negative delta = inward offset. Precision 6 = 1e-6 grid in input units
   // (more than enough for sub-mm laser-cut work).
-  const result = inflatePathsD([pts], -offset, JoinType.Miter, EndType.Polygon, 4, 6);
+  const result = inflatePathsD([pts], -offset, insetJoinType(style), EndType.Polygon, 4, 6);
   if (!result || !result.length) return [];
   // If the inset split the shape (e.g. a tab pinches off into a
   // separate piece) keep the path with the largest absolute area.
@@ -1342,6 +1360,8 @@ function getP() {
     insets:    +document.querySelector('input[name="insets"]:checked').value,
     inset1:    +document.getElementById('inset1').value,
     inset2:    +document.getElementById('inset2').value,
+    inset1Style: document.querySelector('input[name="inset1-style"]:checked').value,
+    inset2Style: document.querySelector('input[name="inset2-style"]:checked').value,
   };
 }
 
@@ -1375,6 +1395,8 @@ function lerpP(cur, tgt) {
   cur.showStats = tgt.showStats;
   cur.scheme = tgt.scheme;
   cur.insets = tgt.insets;
+  cur.inset1Style = tgt.inset1Style;
+  cur.inset2Style = tgt.inset2Style;
   return moving;
 }
 
@@ -1552,9 +1574,9 @@ function drawWithP(p) {
 
   // Convert inset distances (mm) to canvas pixels.
   const mmToPx = sideLen / p.exportSize;
-  const insetDistsPx = [];
-  if (p.insets >= 1) insetDistsPx.push(p.inset1 * mmToPx);
-  if (p.insets >= 2) insetDistsPx.push(p.inset2 * mmToPx);
+  const insetSpecs = [];
+  if (p.insets >= 1) insetSpecs.push({ d: p.inset1 * mmToPx, style: p.inset1Style });
+  if (p.insets >= 2) insetSpecs.push({ d: p.inset2 * mmToPx, style: p.inset2Style });
 
   // Build per-cellRot outline+inset templates once at origin, then translate
   // them into each tile's position. Insets are O(n²) for self-intersection
@@ -1568,7 +1590,7 @@ function drawWithP(p) {
     let o = tileOutline(0, 0, s, r, p.angle, p.angular, SHAPE.sides, cellRot);
     o = smoothSides(o, p.sideSmooth, 0, 0, p.angle);
     if (p.roundEdge > 0 || p.roundVtx > 0) o = roundCorners(o, p.roundEdge * sideLen, p.roundVtx * sideLen);
-    const ins = insetDistsPx.map(d => insetPolyline(o, d)).filter(poly => poly.length >= 3);
+    const ins = insetSpecs.map(spec => insetPolyline(o, spec.d, spec.style)).filter(poly => poly.length >= 3);
     t = { outline: o, insets: ins };
     templateCache.set(cellRot, t);
     return t;
@@ -1775,11 +1797,11 @@ function drawSingleTile(p) {
 
   // Inset layers (cut lines)
   const mmToPxSingle = sl / p.exportSize;
-  const insetDists = [];
-  if (p.insets >= 1) insetDists.push(p.inset1 * mmToPxSingle);
-  if (p.insets >= 2) insetDists.push(p.inset2 * mmToPxSingle);
-  for (const d of insetDists) {
-    const ip = insetPolyline(outline, d);
+  const insetSpecs = [];
+  if (p.insets >= 1) insetSpecs.push({ d: p.inset1 * mmToPxSingle, style: p.inset1Style });
+  if (p.insets >= 2) insetSpecs.push({ d: p.inset2 * mmToPxSingle, style: p.inset2Style });
+  for (const spec of insetSpecs) {
+    const ip = insetPolyline(outline, spec.d, spec.style);
     if (ip.length >= 3) {
       tracePath(ip);
       ctx.strokeStyle = '#e94560';
@@ -2038,11 +2060,11 @@ document.getElementById('export-btn').addEventListener('click', () => {
   // Build inset polylines (in mm space, before Y-flip)
   const insetPolys = [];
   if (p.insets >= 1) {
-    const ip = insetPolyline(pts, p.inset1);
+    const ip = insetPolyline(pts, p.inset1, p.inset1Style);
     if (ip.length >= 3) insetPolys.push(ip);
   }
   if (p.insets >= 2) {
-    const ip = insetPolyline(pts, p.inset2);
+    const ip = insetPolyline(pts, p.inset2, p.inset2Style);
     if (ip.length >= 3) insetPolys.push(ip);
   }
 
@@ -2102,11 +2124,11 @@ document.getElementById('export-grid-btn').addEventListener('click', () => {
     // Inset layers (per tile, in mm space, before Y-flip)
     const tileInsets = [];
     if (p.insets >= 1) {
-      const ip = insetPolyline(pts, p.inset1);
+      const ip = insetPolyline(pts, p.inset1, p.inset1Style);
       if (ip.length >= 3) tileInsets.push(ip);
     }
     if (p.insets >= 2) {
-      const ip = insetPolyline(pts, p.inset2);
+      const ip = insetPolyline(pts, p.inset2, p.inset2Style);
       if (ip.length >= 3) tileInsets.push(ip);
     }
 
@@ -2177,6 +2199,8 @@ function saveToUrl() {
   params.set('scheme', document.getElementById('scheme').value);
   params.set('sides', SHAPE.sides);
   params.set('insets', document.querySelector('input[name="insets"]:checked').value);
+  params.set('inset1-style', document.querySelector('input[name="inset1-style"]:checked').value);
+  params.set('inset2-style', document.querySelector('input[name="inset2-style"]:checked').value);
   history.replaceState(null, '', '#' + params.toString());
 }
 
@@ -2221,6 +2245,13 @@ function loadFromUrl() {
     // Saved-in-URL inset distances are user-set by definition.
     if (params.has('inset1')) insetUserTouched.inset1 = true;
     if (params.has('inset2')) insetUserTouched.inset2 = true;
+  }
+  for (const which of ['inset1-style', 'inset2-style']) {
+    if (params.has(which)) {
+      const v = params.get(which);
+      const r = document.getElementById(which.replace('-style', '-' + v));
+      if (r) r.checked = true;
+    }
   }
 }
 
@@ -2376,6 +2407,10 @@ document.querySelectorAll('input[name="insets"]').forEach(radio =>
     applyInsetDefaults();
     onInput();
   })
+);
+// Per-inset corner style picker — purely visual, just trigger re-render.
+document.querySelectorAll('input[name="inset1-style"], input[name="inset2-style"]').forEach(radio =>
+  radio.addEventListener('change', onInput)
 );
 // Mark inset sliders as user-touched when interacted with.
 ['inset1', 'inset2'].forEach(id => {
