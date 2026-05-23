@@ -1586,19 +1586,41 @@ function drawWithP(p) {
   if (p.insets >= 1) insetDistsPx.push(p.inset1 * mmToPx);
   if (p.insets >= 2) insetDistsPx.push(p.inset2 * mmToPx);
 
+  // Build per-cellRot outline+inset templates once at origin, then translate
+  // them into each tile's position. Insets are expensive (polygon clipping),
+  // and every tile of the same orientation produces an identical shape — no
+  // point recomputing N times per frame. cellRot varies only for triangles
+  // (up vs down); hex/square always returns 0.
+  const templateCache = new Map();
+  const getTemplate = (cellRot) => {
+    let t = templateCache.get(cellRot);
+    if (t) return t;
+    let o = tileOutline(0, 0, s, r, p.angle, p.angular, SHAPE.sides, cellRot);
+    o = smoothSides(o, p.sideSmooth, 0, 0, p.angle);
+    if (p.roundEdge > 0 || p.roundVtx > 0) o = roundCorners(o, p.roundEdge * sideLen, p.roundVtx * sideLen);
+    const ins = insetDistsPx.map(d => insetPolyline(o, d)).filter(poly => poly.length >= 3);
+    t = { outline: o, insets: ins };
+    templateCache.set(cellRot, t);
+    return t;
+  };
+
+  const cosRotT = Math.cos(rotRad), sinRotT = Math.sin(rotRad);
   const tileData = allCells.map(cell => {
     const { x: px, y: py } = SHAPE.cell2px(cell, s);
     const rawCx = ox + px * (1 + p.explode);
     const rawCy = oy + py * (1 + p.explode);
     const { x: cx, y: cy } = rotPt(rawCx, rawCy);
-    const rot = SHAPE.cellRot(cell) + rotRad;
-    let outline = tileOutline(cx, cy, s, r, p.angle, p.angular, SHAPE.sides, rot);
-    outline = smoothSides(outline, p.sideSmooth, cx, cy, p.angle);
-    if (p.roundEdge > 0 || p.roundVtx > 0) outline = roundCorners(outline, p.roundEdge * sideLen, p.roundVtx * sideLen);
-    const insets = insetDistsPx.map(d => insetPolyline(outline, d)).filter(poly => poly.length >= 3);
+    const cellRot = SHAPE.cellRot(cell);
+    const tpl = getTemplate(cellRot);
+    // Transform template points: translate to (cx, cy), then rotate by table rotation.
+    const xform = rotRad === 0
+      ? (pt) => ({ x: pt.x + cx, y: pt.y + cy })
+      : (pt) => ({ x: cx + pt.x * cosRotT - pt.y * sinRotT, y: cy + pt.x * sinRotT + pt.y * cosRotT });
+    const outline = tpl.outline.map(xform);
+    const insets = tpl.insets.map(poly => poly.map(xform));
     const cellFade = getCellOpacity(cell);
     const shapeFade = shapeFading ? Math.min(1, fadeElapsed / SHAPE_FADE_DUR) : 1;
-    return { cell, cx, cy, outline, insets, ci: SHAPE.cellColor(cell), rot, fade: cellFade * shapeFade };
+    return { cell, cx, cy, outline, insets, ci: SHAPE.cellColor(cell), rot: cellRot + rotRad, fade: cellFade * shapeFade };
   });
   if (tilt > 0) tileData.sort((a, b) => a.cy - b.cy);
 
