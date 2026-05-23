@@ -1050,16 +1050,22 @@ function insetPolyline(pts, offset) {
   }
 
   if (result.length < 3) return [];
-  return removeSelfIntersections(result);
+  // Pass the source centroid so the cleanup can identify the genuine
+  // inset (which always wraps the centroid) vs artifact loops.
+  let cx = 0, cy = 0;
+  for (const p of pts) { cx += p.x; cy += p.y; }
+  cx /= pts.length; cy /= pts.length;
+  return removeSelfIntersections(result, { x: cx, y: cy });
 }
 
 // Strip artifact loops from a closed polyline. After the local trim
 // cascade, extreme insets can still produce non-adjacent edge crossings
 // (e.g. when two collapsed features end up overlapping). At each crossing
-// the polyline splits into two closed loops; we keep the one with the
-// larger area (the genuine inset; the smaller loop is the artifact) and
-// iterate until no crossings remain.
-function removeSelfIntersections(poly) {
+// the polyline splits into two closed loops; the genuine inset is the
+// one that contains the source shape's centroid. (Earlier we used
+// larger-area, but at deep insets the artifact can exceed the genuine
+// inset in area — centroid containment is the topologically right test.)
+function removeSelfIntersections(poly, centroid) {
   let cur = poly;
   for (let iter = 0; iter < 24; iter++) {
     const n = cur.length;
@@ -1091,9 +1097,27 @@ function removeSelfIntersections(poly) {
     for (let k = hit.j + 1; k < n; k++) outerLoop.push(cur[k]);
     const innerLoop = [I];
     for (let k = hit.i + 1; k <= hit.j; k++) innerLoop.push(cur[k]);
-    cur = (polyArea(outerLoop) >= polyArea(innerLoop)) ? outerLoop : innerLoop;
+
+    const outerContains = pointInPoly(centroid, outerLoop);
+    const innerContains = pointInPoly(centroid, innerLoop);
+    if (outerContains && !innerContains) cur = outerLoop;
+    else if (innerContains && !outerContains) cur = innerLoop;
+    else cur = (polyArea(outerLoop) >= polyArea(innerLoop)) ? outerLoop : innerLoop;
   }
   return cur;
+}
+
+function pointInPoly(p, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i].x, yi = poly[i].y;
+    const xj = poly[j].x, yj = poly[j].y;
+    if (((yi > p.y) !== (yj > p.y)) &&
+        (p.x < (xj - xi) * (p.y - yi) / (yj - yi) + xi)) {
+      inside = !inside;
+    }
+  }
+  return inside;
 }
 
 function polyArea(p) {
